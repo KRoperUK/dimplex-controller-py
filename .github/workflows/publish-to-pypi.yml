@@ -3,6 +3,7 @@ name: Publish to PyPI
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -10,9 +11,9 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # environment:
-    #   name: pypi
-    #   url: https://pypi.org/project/dimplex-controller/
+    environment:
+      name: pypi
+      url: https://pypi.org/project/dimplex-controller/
     permissions:
       id-token: write
     steps:
