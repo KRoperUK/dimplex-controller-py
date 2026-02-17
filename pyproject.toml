@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dimplex-controller"
-version = "0.1.0"
+version = "0.2.0"
 description = "Python client for Dimplex heating controllers (GDHV IoT)"
 authors = ["Kieran Roper"]
 license = "MIT"
