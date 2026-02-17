@@ -1,5 +1,10 @@
 # Dimplex Controller Python Client
 
+[![PyPI](https://img.shields.io/pypi/v/dimplex-controller.svg)](https://pypi.org/project/dimplex-controller/)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-black?logo=github)](https://github.com/KRoperUK/dimplex-controller-py)
+
 A Python asyncio client for controlling Dimplex heating systems (GDHV IoT).
 
 ## Features
