@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.1.0 (2026-02-17)
+
+
+### Features
+
+* initial ([#1](https://github.com/KRoperUK/dimplex-controller-py/issues/1)) ([074baac](https://github.com/KRoperUK/dimplex-controller-py/commit/074baac298688997d807a4f6e577a894639ac61c))
+
+
+### Documentation
+
+* add readme badges ([#4](https://github.com/KRoperUK/dimplex-controller-py/issues/4)) ([fc82d23](https://github.com/KRoperUK/dimplex-controller-py/commit/fc82d23da54176f35e35fb8e24270ddc3446ba97))
+
 ## [1.0.0] - 2026-02-17
 
 ### Added
