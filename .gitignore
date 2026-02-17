@@ -1,0 +1,8 @@
+*.env
+*.chlsj
+.venv_bootstrap/
+.venv/
+*__pycache__/
+dimplex_tokens.json
+.pytest_cache
+.ruff_cache
