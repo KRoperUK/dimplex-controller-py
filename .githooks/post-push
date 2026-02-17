@@ -1,0 +1,23 @@
+#!/bin/bash
+# Post-push hook to automatically create a PR with commit message as title
+
+# Get the branch name
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+# Skip if on main or master
+if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
+    exit 0
+fi
+
+# Get the latest commit message
+COMMIT_MSG=$(git log -1 --pretty=%B)
+
+# Check if PR already exists
+if gh pr list --head "$BRANCH" --state open --json number | grep -q "number"; then
+    echo "PR already exists for branch $BRANCH"
+    exit 0
+fi
+
+# Create the PR with commit message as title
+echo "Creating PR for branch $BRANCH with title: $COMMIT_MSG"
+gh pr create --title "$COMMIT_MSG" --fill
