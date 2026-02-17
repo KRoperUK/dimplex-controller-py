@@ -2,7 +2,7 @@
 name = "dimplex-controller"
 version = "1.0.0"
 description = "Python client for Dimplex heating controllers (GDHV IoT)"
-authors = ["Keiran Roper"]
+authors = ["Kieran Roper"]
 license = "MIT"
 readme = "README.md"
 homepage = "https://github.com/KRoperUK/dimplex-controller-py"
