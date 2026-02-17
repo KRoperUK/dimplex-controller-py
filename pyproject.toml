@@ -1,0 +1,48 @@
+[tool.poetry]
+name = "dimplex-controller"
+version = "1.0.0"
+description = "Python client for Dimplex heating controllers (GDHV IoT)"
+authors = ["Keiran Roper"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/KRoperUK/dimplex-controller-py"
+repository = "https://github.com/KRoperUK/dimplex-controller-py"
+keywords = ["dimplex", "heating", "control", "iot", "asyncio"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Home Automation",
+]
+packages = [{ include = "dimplex_controller" }]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+aiohttp = "^3.9.0"
+pydantic = "^2.0.0"
+beautifulsoup4 = "^4.14.3"
+python-dotenv = "^1.2.1"
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-asyncio = "^0.23.0"
+aresponses = "^3.0.0"
+ruff = "^0.3.0"
+pre-commit = "^3.6.0"
+twine = "^6.2.0"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

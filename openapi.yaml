@@ -1,0 +1,370 @@
+openapi: 3.0.0
+info:
+  title: Dimplex Controller API
+  version: 1.0.0
+  description: API for controlling Dimplex heating devices via the GDHV IoT platform.
+
+servers:
+  - url: https://mobileapi.gdhv-iot.com/api
+    description: Main Mobile API
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Hub:
+      type: object
+      properties:
+        HubId:
+          type: string
+        Name:
+          type: string
+        FriendlyName:
+          type: string
+
+    Zone:
+      type: object
+      properties:
+        ZoneId:
+          type: string
+        ZoneName:
+          type: string
+        HubId:
+          type: string
+        ZoneType:
+          type: string
+        Appliances:
+          type: array
+          items:
+            $ref: "#/components/schemas/Appliance"
+
+    Appliance:
+      type: object
+      properties:
+        ApplianceId:
+          type: string
+        ApplianceType:
+          type: string
+        ApplianceModel:
+          type: string
+        ZoneId:
+          type: string
+        FriendlyName:
+          type: string
+        InstallationDate:
+          type: string
+          format: date-time
+
+    TimerPeriod:
+      type: object
+      properties:
+        DayOfWeek:
+          type: integer
+        StartTime:
+          type: string
+          format: time
+          example: "06:00:00"
+        EndTime:
+          type: string
+          format: time
+          example: "12:00:00"
+        Temperature:
+          type: number
+
+    TimerModeSettings:
+      type: object
+      properties:
+        HubId:
+          type: string
+        ApplianceId:
+          type: string
+        TimerMode:
+          type: integer
+        TimerPeriods:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimerPeriod"
+
+    ApplianceStatus:
+      type: object
+      properties:
+        HubId:
+          type: string
+        ApplianceId:
+          type: string
+        ZoneId:
+          type: string
+        StatusTwo:
+          type: integer
+        ApplianceModes:
+          type: integer
+        RoomTemperature:
+          type: number
+        ActiveSetPointTemperature:
+          type: number
+        NormalTemperature:
+          type: number
+        AwayDateTime:
+          type: string
+          format: date-time
+        AwayTemperature:
+          type: number
+        BoostDuration:
+          type: integer
+        BoostTemperature:
+          type: number
+        OpenWindowEnabled:
+          type: boolean
+        EcoStartEnabled:
+          type: boolean
+        SetbackEnabled:
+          type: boolean
+        SetbackEnabledInStatusFrame:
+          type: boolean
+        SetbackTemperature:
+          type: number
+        ComfortStatus:
+          type: boolean
+        AvailableHotWater:
+          type: number
+        LockStatus:
+          type: integer
+        ErrorCode:
+          type: string
+        WarningCode:
+          type: string
+
+    ApplianceModeSettings:
+      type: object
+      properties:
+        ApplianceModes:
+          type: integer
+        Status:
+          type: integer
+        Temperature:
+          type: number
+        Time:
+          type: integer
+        Date:
+          type: string
+        StatusTwo:
+          type: integer
+        NumberOfDays:
+          type: integer
+        Frequency:
+          type: integer
+
+    UserContext:
+      type: object
+      properties:
+        Id:
+          type: string
+        EmailAddress:
+          type: string
+        Name:
+          type: string
+
+security:
+  - BearerAuth: []
+
+paths:
+  /Hubs/GetUserHubs:
+    get:
+      summary: Get user's hubs
+      responses:
+        "200":
+          description: List of hubs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Hub"
+
+  /Zones/GetZonesAndAppliancesForHubId:
+    get:
+      summary: Get zones and appliances for a specific hub
+      parameters:
+        - name: HubId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of zones with appliances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Zone"
+
+  /Zones/GetZone:
+    post:
+      summary: Get details for a specific zone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                HubId:
+                  type: string
+                ZoneId:
+                  type: string
+      responses:
+        "200":
+          description: Zone details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Zone"
+
+  /RemoteControl/GetApplianceOverview:
+    post:
+      summary: Get status overview for specific appliances
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                HubId:
+                  type: string
+                ApplianceIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Appliance overview
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApplianceStatus"
+
+  /RemoteControl/GetTimerModeDetailsForAppliance:
+    post:
+      summary: Get timer settings for an appliance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                HubId:
+                  type: string
+                ApplianceId:
+                  type: string
+                TimerMode:
+                  type: integer
+      responses:
+        "200":
+          description: Timer details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimerModeSettings"
+
+  /RemoteControl/SetTimerMode:
+    post:
+      summary: Set timer mode and periods for an appliance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                TimerModeSettings:
+                  $ref: "#/components/schemas/TimerModeSettings"
+      responses:
+        "200":
+          description: Success
+
+  /RemoteControl/SetApplianceMode:
+    post:
+      summary: Set appliance mode (Boost, Away, etc.)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                Settings:
+                  $ref: "#/components/schemas/ApplianceModeSettings"
+                HubId:
+                  type: string
+                ApplianceIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Success
+
+  /RemoteControl/SetEcoStart:
+    post:
+      summary: Enable/Disable EcoStart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                Enable:
+                  type: boolean
+                HubId:
+                  type: string
+                ApplianceIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Success
+
+  /RemoteControl/SetOpenWindowDetection:
+    post:
+      summary: Enable/Disable Open Window Detection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                Enable:
+                  type: boolean
+                HubId:
+                  type: string
+                ApplianceIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Success
+
+  /Identity/GetUserContext:
+    get:
+      summary: Get user profile/context
+      responses:
+        "200":
+          description: User properties
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserContext"
