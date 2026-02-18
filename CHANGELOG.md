@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.2.0...v0.2.1) (2026-02-18)
+
+
+### Bug Fixes
+
+* prettier ignore changelog ([#9](https://github.com/KRoperUK/dimplex-controller-py/issues/9)) ([d91ac64](https://github.com/KRoperUK/dimplex-controller-py/commit/d91ac64651c14c1ee53e627795e7563d120f47b7))
+
 ## [0.2.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.1.0...v0.2.0) (2026-02-17)
 
 
