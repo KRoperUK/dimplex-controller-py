@@ -154,20 +154,16 @@ class AuthManager:
             base_url = page_url.split("/oauth2/v2.0/authorize")[0]
         else:
             parsed = urlparse(page_url)
-            base_url = (
-                f"{parsed.scheme}://{parsed.netloc}"
-                f"/gdhvb2c.onmicrosoft.com/{B2C_POLICY}"
-            )
+            base_url = f"{parsed.scheme}://{parsed.netloc}" f"/gdhvb2c.onmicrosoft.com/{B2C_POLICY}"
 
         return {
             "csrf": csrf,
             "tx": tx,
             "p": B2C_POLICY,
             "post_url": f"{base_url}/SelfAsserted?tx={tx}&p={B2C_POLICY}",
-            "confirmed_url": (
-                f"{base_url}/api/CombinedSigninAndSignup/confirmed"
-            ),
+            "confirmed_url": (f"{base_url}/api/CombinedSigninAndSignup/confirmed"),
         }
+
     async def headless_login(self, email: str, password: str) -> None:
         """Perform a headless login via Azure AD B2C to obtain tokens.
 
@@ -184,9 +180,7 @@ class AuthManager:
                 login_html = await resp.text()
                 page_url = str(resp.url)
                 if resp.status != HTTP_OK:
-                    raise DimplexAuthError(
-                        f"B2C login page returned HTTP {resp.status}"
-                    )
+                    raise DimplexAuthError(f"B2C login page returned HTTP {resp.status}")
 
             # Step 2: Parse the login page for CSRF, transaction ID, policy
             fields = self._parse_b2c_login_page(login_html, page_url)
@@ -218,9 +212,7 @@ class AuthManager:
             # containing +/= in double-quotes, but B2C requires raw values.
             cookie_header = self._build_cookie_header(jar, fields["post_url"])
             post_headers["Cookie"] = cookie_header
-            _LOGGER.debug(
-                "Submitting credentials to %s", fields["post_url"]
-            )
+            _LOGGER.debug("Submitting credentials to %s", fields["post_url"])
 
             # Use DummyCookieJar so POST response cookies aren't
             # re-injected with quoted values on the next request.
@@ -235,9 +227,7 @@ class AuthManager:
                 ) as resp:
                     body = await resp.text()
                     if resp.status != HTTP_OK:
-                        raise DimplexAuthError(
-                            f"Credential submission returned HTTP {resp.status}"
-                        )
+                        raise DimplexAuthError(f"Credential submission returned HTTP {resp.status}")
                     try:
                         resp_data = json.loads(body)
                         if str(resp_data.get("status")) == "400":
@@ -256,16 +246,11 @@ class AuthManager:
                         if "=" in sc_pair:
                             n, v = sc_pair.split("=", 1)
                             cookies[n] = v
-                    cookie_header = "; ".join(
-                        f"{n}={v}" for n, v in cookies.items()
-                    )
+                    cookie_header = "; ".join(f"{n}={v}" for n, v in cookies.items())
 
                 # Step 4: GET the confirmed endpoint and follow redirects
                 confirmed_qs = (
-                    f"rememberMe=false"
-                    f"&csrf_token={fields['csrf']}"
-                    f"&tx={fields['tx']}"
-                    f"&p={fields['p']}"
+                    f"rememberMe=false" f"&csrf_token={fields['csrf']}" f"&tx={fields['tx']}" f"&p={fields['p']}"
                 )
                 next_url: str = fields["confirmed_url"] + "?" + confirmed_qs
                 confirmed_headers = {"Cookie": cookie_header}
@@ -281,12 +266,9 @@ class AuthManager:
                         if resp.status in (301, 302, 303, 307, 308):
                             location = resp.headers.get("Location", "")
                             if not location:
-                                raise DimplexAuthError(
-                                    "Redirect without Location header"
-                                )
+                                raise DimplexAuthError("Redirect without Location header")
                             if location.startswith(REDIRECT_URI) and (
-                                len(location) == len(REDIRECT_URI)
-                                or location[len(REDIRECT_URI)] in ("?", "/")
+                                len(location) == len(REDIRECT_URI) or location[len(REDIRECT_URI)] in ("?", "/")
                             ):
                                 _LOGGER.debug(
                                     "Captured redirect with code: %s...",
@@ -296,15 +278,12 @@ class AuthManager:
                                 query = parse_qs(parsed.query)
                                 code = query.get("code", [""])[0]
                                 if not code:
-                                    raise DimplexAuthError(
-                                        "Redirect URL missing auth code"
-                                    )
+                                    raise DimplexAuthError("Redirect URL missing auth code")
                                 await self.exchange_code(code)
                                 return
                             if not location.startswith("http"):
                                 location = (
-                                    f"{parsed_page.scheme}://{parsed_page.netloc}"
-                                    + location
+                                    f"{parsed_page.scheme}://{parsed_page.netloc}" + location
                                     if location.startswith("/")
                                     else location
                                 )
@@ -322,16 +301,10 @@ class AuthManager:
                                 if code:
                                     await self.exchange_code(code)
                                     return
-                            raise DimplexAuthError(
-                                "Reached 200 response without finding redirect URL"
-                            )
-                        raise DimplexAuthError(
-                            f"Unexpected HTTP {resp.status} during redirect chain"
-                        )
+                            raise DimplexAuthError("Reached 200 response without finding redirect URL")
+                        raise DimplexAuthError(f"Unexpected HTTP {resp.status} during redirect chain")
 
-            raise DimplexAuthError(
-                "Exceeded maximum redirect hops without capturing auth code"
-            )
+            raise DimplexAuthError("Exceeded maximum redirect hops without capturing auth code")
 
     def save_tokens(self, file_path: str) -> None:
         """Save current tokens to a JSON file."""
