@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.2.1...v0.3.0) (2026-06-22)
+
+
+### Features
+
+* robust headless B2C login ([#13](https://github.com/KRoperUK/dimplex-controller-py/issues/13)) ([a7d5064](https://github.com/KRoperUK/dimplex-controller-py/commit/a7d506466bf9177b1f850bb53678479a2c74f030))
+* robust headless B2C login with proper cookie handling ([a7d5064](https://github.com/KRoperUK/dimplex-controller-py/commit/a7d506466bf9177b1f850bb53678479a2c74f030))
+
+
+### Bug Fixes
+
+* regenerate poetry.lock for yanked virtualenv ([#11](https://github.com/KRoperUK/dimplex-controller-py/issues/11)) ([93ca460](https://github.com/KRoperUK/dimplex-controller-py/commit/93ca460c654fce40366edd6f50b4db7bec36acdd))
+* regenerate poetry.lock to resolve yanked virtualenv 20.37.0 ([93ca460](https://github.com/KRoperUK/dimplex-controller-py/commit/93ca460c654fce40366edd6f50b4db7bec36acdd))
+* remove unused imports causing ruff lint failure ([#14](https://github.com/KRoperUK/dimplex-controller-py/issues/14)) ([7e97c30](https://github.com/KRoperUK/dimplex-controller-py/commit/7e97c30a4169e7379718bcebb355ad42e79e474c))
+* ruff format ([#15](https://github.com/KRoperUK/dimplex-controller-py/issues/15)) ([ea24ad8](https://github.com/KRoperUK/dimplex-controller-py/commit/ea24ad8da60e13929bd6db33078057fdf3f39e11))
+
 ## [0.2.1](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.2.0...v0.2.1) (2026-02-18)
 
 
