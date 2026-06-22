@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 
 from .const import (
     AUTH_URL,
+    B2C_POLICY,
     CLIENT_ID,
     HTTP_OK,
     REDIRECT_URI,
@@ -120,165 +121,218 @@ class AuthManager:
             data = await resp.json()
             self._update_tokens(data)
 
-    async def headless_login(self, email, password) -> None:
-        """Perform a headless login to obtain tokens."""
-        # 1. Get the login page
-        params = {
-            "client_id": CLIENT_ID,
-            "response_type": "code",
-            "redirect_uri": REDIRECT_URI,
-            "scope": SCOPE,
-            "response_mode": "query",
-        }
-        start_url = f"{AUTH_URL}/authorize?{urlencode(params)}"
-        _LOGGER.debug(f"Fetching login page: {start_url}")
+    @staticmethod
+    def _build_cookie_header(cookie_jar, url: str) -> str:
+        """Build an unquoted Cookie header from an aiohttp cookie jar.
 
-        async with self._session.get(start_url) as resp:
-            html = await resp.text()
-            final_url = str(resp.url)
+        Python's http.cookies wraps values containing +, /, or = in
+        double-quotes, but Azure AD B2C expects raw unquoted values.
+        """
+        filtered = cookie_jar.filter_cookies(url)
+        return "; ".join(f"{m.key}={m.value}" for m in filtered.values())
 
-        # 2. Extract SETTINGS and CSRF
-        match = re.search(r"SETTINGS\s*=\s*({.*?});", html, re.DOTALL | re.MULTILINE)
-        if not match:
-            raise DimplexAuthError("Could not find SETTINGS in login page")
+    @staticmethod
+    def _parse_b2c_login_page(html: str, page_url: str) -> dict:
+        """Extract B2C form fields from the login page HTML.
 
-        try:
-            settings = json.loads(match.group(1))
-        except json.JSONDecodeError:
-            raise DimplexAuthError("Failed to parse SETTINGS JSON from login page")
+        Returns a dict with csrf, tx, p, post_url, confirmed_url.
+        Raises DimplexAuthError if required fields cannot be found.
+        """
+        csrf_match = re.search(r'"csrf"\s*:\s*"([^"]+)"', html)
+        if not csrf_match:
+            raise DimplexAuthError("Could not find CSRF token in B2C login page")
+        csrf = csrf_match.group(1)
 
-        csrf_token = settings.get("csrf")
-        trans_id = settings.get("transId")
+        tx_match = re.search(r'"transId"\s*:\s*"([^"]+)"', html)
+        if not tx_match:
+            raise DimplexAuthError("Could not find transId in B2C login page")
+        tx = tx_match.group(1)
 
-        if not csrf_token or not trans_id:
-            raise DimplexAuthError("Missing csrf or transId in login page SETTINGS")
-
-        # 3. Construct SelfAsserted URL
-        if "/oauth2/v2.0/authorize" in final_url:
-            base_url = final_url.split("/oauth2/v2.0/authorize")[0]
+        # Build base URL by stripping the authorize endpoint.
+        # The B2C login page URL contains /tfp/{tenant}/{policy}/oauth2/v2.0/authorize
+        # and may redirect to /{tenant}/{policy}/oauth2/v2.0/authorize
+        if "/oauth2/v2.0/authorize" in page_url:
+            base_url = page_url.split("/oauth2/v2.0/authorize")[0]
         else:
-            base_url = "https://gdhvb2c.b2clogin.com/gdhvb2c.onmicrosoft.com/B2C_1A_DimplexControlSignupSignin"
+            parsed = urlparse(page_url)
+            base_url = (
+                f"{parsed.scheme}://{parsed.netloc}"
+                f"/gdhvb2c.onmicrosoft.com/{B2C_POLICY}"
+            )
 
-        post_url = f"{base_url}/SelfAsserted"
-
-        params = {
-            "tx": trans_id,
-            "p": "B2C_1A_DimplexControlSignupSignin",
+        return {
+            "csrf": csrf,
+            "tx": tx,
+            "p": B2C_POLICY,
+            "post_url": f"{base_url}/SelfAsserted?tx={tx}&p={B2C_POLICY}",
+            "confirmed_url": (
+                f"{base_url}/api/CombinedSigninAndSignup/confirmed"
+            ),
         }
+    async def headless_login(self, email: str, password: str) -> None:
+        """Perform a headless login via Azure AD B2C to obtain tokens.
 
-        post_url_with_params = f"{post_url}?{urlencode(params)}"
+        Uses direct HTTP credential submission so users don't need to
+        manually extract auth codes from browser network traffic.
+        """
+        jar = aiohttp.CookieJar(unsafe=True)
+        start_url = self.get_login_url()
 
-        # 4. Submit Credentials
-        # Extract hidden fields from the form to ensure we aren't missing anything
-        soup = BeautifulSoup(html, "html.parser")
-        form = soup.find("form", {"id": "localAccountForm"}) or soup.find("form")
+        async with aiohttp.ClientSession(cookie_jar=jar) as session:
+            # Step 1: GET the auth URI, follow redirects to B2C login page
+            _LOGGER.debug("Fetching B2C login page: %s", start_url)
+            async with session.get(start_url, allow_redirects=True) as resp:
+                login_html = await resp.text()
+                page_url = str(resp.url)
+                if resp.status != HTTP_OK:
+                    raise DimplexAuthError(
+                        f"B2C login page returned HTTP {resp.status}"
+                    )
 
-        form_data = {}
-        if form:
-            for input_tag in form.find_all("input"):
-                name = input_tag.get("name")
-                value = input_tag.get("value", "")
-                if name:
-                    form_data[name] = value
+            # Step 2: Parse the login page for CSRF, transaction ID, policy
+            fields = self._parse_b2c_login_page(login_html, page_url)
+            _LOGGER.debug(
+                "Parsed B2C login page: csrf=%s... tx=%s... p=%s",
+                fields["csrf"][:16],
+                fields["tx"][:40],
+                fields["p"],
+            )
 
-        # Overwrite with credentials
-        form_data.update(
-            {
+            # Step 3: POST credentials to SelfAsserted endpoint
+            post_data = {
                 "request_type": "RESPONSE",
                 "email": email,
                 "password": password,
             }
-        )
+            parsed_page = urlparse(page_url)
+            origin = f"{parsed_page.scheme}://{parsed_page.netloc}"
+            post_headers = {
+                "X-CSRF-TOKEN": fields["csrf"],
+                "X-Requested-With": "XMLHttpRequest",
+                "Referer": page_url,
+                "Origin": origin,
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            }
 
-        headers = {
-            "X-CSRF-TOKEN": csrf_token,
-            "X-Requested-With": "XMLHttpRequest",
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            "Origin": "https://gdhvb2c.b2clogin.com",
-            "Referer": final_url,
-        }
-
-        _LOGGER.debug(f"Submitting credentials to {post_url_with_params}")
-        # _LOGGER.debug(f"Form data: {form_data}") # Security risk to log password
-
-        async with self._session.post(post_url_with_params, data=form_data, headers=headers) as resp:
-            resp_text = await resp.text()
-            _LOGGER.debug(f"Login response status: {resp.status}")
-
-            try:
-                resp_json = json.loads(resp_text)
-                _LOGGER.debug(f"Login response JSON: {resp_json}")
-            except json.JSONDecodeError:
-                _LOGGER.debug(f"Login response Text: {resp_text}")
-                raise DimplexAuthError(f"Login response was not valid JSON: {resp_text[:100]}")
-
-            if resp_json.get("status") != "200":
-                status = resp_json.get("status")
-                message = resp_json.get("message") or resp_json.get("reason", "Unknown reason")
-                raise DimplexAuthError(f"Login failed: {status} - {message}")
-
-        # 5. Follow the 'Confirmed' step to get the actual code
-        # After a successful SelfAsserted, we usually need to make a GET to
-        # the 'CombinedSigninAndSignup' or similar endpoint to finalize the
-        # flow and get the redirect to our app with the code.
-        # Or, sometimes the SelfAsserted response sets a cookie and we just
-        # need to hit the authorize endpoint again.
-
-        # Let's try hitting the original authorize URL again (or the one we were redirected to).
-        # Since cookies are in the session, it should now redirect us to the app with the code.
-
-        _LOGGER.debug("Credentials accepted. Fetching authorize URL again to get code.")
-
-        # We need to allow redirects to capture the final msauth:// url
-        # aiohttp generic session checks redirects.
-        # But since the scheme is custom (msal...), aiohttp might throw an error or stop.
-
-        try:
-            async with self._session.get(start_url, allow_redirects=True) as resp:
-                # If we are here, it means we didn't crash on custom scheme yet,
-                # or we are at a page that directs us.
-                # Check history
-                pass
-        except aiohttp.ClientError:
-            # This might happen if the redirect schema is not http/https
-            # We can inspect the error or just capture it from the history if possible
-            pass
-        except Exception:
-            # If it tries to redirect to msal..., it might fail if aiohttp doesn't support it.
-            # We can disable redirects and follow manually to catch it.
-            pass
-
-        # Manual redirect following to catch custom scheme
-        current_url = start_url
-        code = None
-
-        for _ in range(10):  # Max redirects
-            async with self._session.get(current_url, allow_redirects=False) as resp:
-                if resp.status in (302, 303, 301):
-                    location = resp.headers.get("Location")
-                    if not location:
-                        break
-
-                    if location.startswith(REDIRECT_URI) or "code=" in location:
-                        # Success!
-                        _LOGGER.debug(f"Found redirect with code: {location}")
-                        # Extract code
-                        parsed = urlparse(location)
-                        query = parse_qs(parsed.query)
-                        code = query.get("code", [""])[0]
-                        break
-
-                    current_url = location
-                else:
-                    break
-
-        if not code:
-            raise DimplexAuthError(
-                "Failed to obtain auth code after successful login. Redirect URI might have changed."
+            # Build an unquoted Cookie header — aiohttp wraps values
+            # containing +/= in double-quotes, but B2C requires raw values.
+            cookie_header = self._build_cookie_header(jar, fields["post_url"])
+            post_headers["Cookie"] = cookie_header
+            _LOGGER.debug(
+                "Submitting credentials to %s", fields["post_url"]
             )
 
-        _LOGGER.debug(f"Got code: {code[:10]}...")
-        await self.exchange_code(code)
+            # Use DummyCookieJar so POST response cookies aren't
+            # re-injected with quoted values on the next request.
+            async with aiohttp.ClientSession(
+                cookie_jar=aiohttp.DummyCookieJar(),
+            ) as raw_session:
+                async with raw_session.post(
+                    fields["post_url"],
+                    data=post_data,
+                    headers=post_headers,
+                    allow_redirects=False,
+                ) as resp:
+                    body = await resp.text()
+                    if resp.status != HTTP_OK:
+                        raise DimplexAuthError(
+                            f"Credential submission returned HTTP {resp.status}"
+                        )
+                    try:
+                        resp_data = json.loads(body)
+                        if str(resp_data.get("status")) == "400":
+                            raise DimplexAuthError("Invalid email or password")
+                    except json.JSONDecodeError:
+                        pass
+
+                    # Merge POST response cookies into the cookie header
+                    cookies: dict[str, str] = {}
+                    for part in cookie_header.split("; "):
+                        if "=" in part:
+                            n, v = part.split("=", 1)
+                            cookies[n] = v
+                    for raw_sc in resp.headers.getall("Set-Cookie", []):
+                        sc_pair = raw_sc.split(";", 1)[0]
+                        if "=" in sc_pair:
+                            n, v = sc_pair.split("=", 1)
+                            cookies[n] = v
+                    cookie_header = "; ".join(
+                        f"{n}={v}" for n, v in cookies.items()
+                    )
+
+                # Step 4: GET the confirmed endpoint and follow redirects
+                confirmed_qs = (
+                    f"rememberMe=false"
+                    f"&csrf_token={fields['csrf']}"
+                    f"&tx={fields['tx']}"
+                    f"&p={fields['p']}"
+                )
+                next_url: str = fields["confirmed_url"] + "?" + confirmed_qs
+                confirmed_headers = {"Cookie": cookie_header}
+
+                for _ in range(20):  # max redirect hops
+                    _LOGGER.debug("Following redirect: %s", next_url[:120])
+                    async with raw_session.get(
+                        next_url,
+                        headers=confirmed_headers,
+                        allow_redirects=False,
+                    ) as resp:
+                        resp_body = await resp.text()
+                        if resp.status in (301, 302, 303, 307, 308):
+                            location = resp.headers.get("Location", "")
+                            if not location:
+                                raise DimplexAuthError(
+                                    "Redirect without Location header"
+                                )
+                            if location.startswith(REDIRECT_URI) and (
+                                len(location) == len(REDIRECT_URI)
+                                or location[len(REDIRECT_URI)] in ("?", "/")
+                            ):
+                                _LOGGER.debug(
+                                    "Captured redirect with code: %s...",
+                                    location[:120],
+                                )
+                                parsed = urlparse(location)
+                                query = parse_qs(parsed.query)
+                                code = query.get("code", [""])[0]
+                                if not code:
+                                    raise DimplexAuthError(
+                                        "Redirect URL missing auth code"
+                                    )
+                                await self.exchange_code(code)
+                                return
+                            if not location.startswith("http"):
+                                location = (
+                                    f"{parsed_page.scheme}://{parsed_page.netloc}"
+                                    + location
+                                    if location.startswith("/")
+                                    else location
+                                )
+                            next_url = location
+                            continue
+                        if resp.status == HTTP_OK:
+                            redirect_match = re.search(
+                                rf"({re.escape(REDIRECT_URI)}\?[^\s\"'<]+)",
+                                resp_body,
+                            )
+                            if redirect_match:
+                                parsed = urlparse(redirect_match.group(1))
+                                query = parse_qs(parsed.query)
+                                code = query.get("code", [""])[0]
+                                if code:
+                                    await self.exchange_code(code)
+                                    return
+                            raise DimplexAuthError(
+                                "Reached 200 response without finding redirect URL"
+                            )
+                        raise DimplexAuthError(
+                            f"Unexpected HTTP {resp.status} during redirect chain"
+                        )
+
+            raise DimplexAuthError(
+                "Exceeded maximum redirect hops without capturing auth code"
+            )
 
     def save_tokens(self, file_path: str) -> None:
         """Save current tokens to a JSON file."""
