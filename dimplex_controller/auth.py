@@ -4,10 +4,9 @@ import os
 import re
 import time
 from typing import Dict, Optional
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, urlparse
 
 import aiohttp
-from bs4 import BeautifulSoup
 
 from .const import (
     AUTH_URL,
