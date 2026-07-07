@@ -97,3 +97,22 @@ class ApplianceModeSettings(BaseModel):
     StatusTwo: int = 0
     NumberOfDays: int = 0
     Frequency: int = 0
+
+
+class TsiEnergyReport(BaseModel):
+    """Response from `POST /Reports/GetTsiEnergyReportDataForHub`.
+
+    The cloud returns one telemetry bucket per appliance registered to the hub.
+    Each bucket is a list of points whose individual shape is undocumented and
+    appears to vary by firmware; entries are normalised by
+    :func:`dimplex_controller.telemetry.parse_telemetry_points` so callers do
+    not have to know the wire format.
+    """
+
+    HubId: str
+    ApplianceTelemetryData: dict[str, list] = Field(default_factory=dict)
+
+
+# `TsiReportType` integer values understood by the API. We do not know the
+# canonical mapping; these are observed in traffic captures.
+TSI_REPORT_TYPE_ENERGY = 1

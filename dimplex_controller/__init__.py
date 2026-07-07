@@ -2,7 +2,8 @@
 
 from .client import DimplexControl
 from .exceptions import DimplexApiError, DimplexAuthError, DimplexConnectionError, DimplexError
-from .models import Appliance, ApplianceModeSettings, ApplianceStatus, Hub, Zone
+from .models import Appliance, ApplianceModeSettings, ApplianceStatus, Hub, TsiEnergyReport, Zone
+from .telemetry import parse_telemetry_points
 
 __all__ = [
     "DimplexControl",
@@ -11,6 +12,8 @@ __all__ = [
     "Appliance",
     "ApplianceStatus",
     "ApplianceModeSettings",
+    "TsiEnergyReport",
+    "parse_telemetry_points",
     "DimplexError",
     "DimplexApiError",
     "DimplexAuthError",
