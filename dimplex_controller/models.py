@@ -1,5 +1,4 @@
 from datetime import datetime, time
-from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -7,14 +6,14 @@ from pydantic import BaseModel, Field
 class Appliance(BaseModel):
     ApplianceId: str
     ApplianceType: str
-    ApplianceModel: Optional[str] = None
+    ApplianceModel: str | None = None
     ZoneId: str
     FriendlyName: str
     ZoneName: str
-    Icon: Optional[str] = None
-    IconColor: Optional[str] = None
-    InstallationDate: Optional[datetime] = None
-    HasConnectivity: Optional[bool] = None
+    Icon: str | None = None
+    IconColor: str | None = None
+    InstallationDate: datetime | None = None
+    HasConnectivity: bool | None = None
 
 
 class Zone(BaseModel):
@@ -22,13 +21,13 @@ class Zone(BaseModel):
     ZoneName: str
     HubId: str
     ZoneType: str
-    Appliances: List[Appliance] = Field(default_factory=list)
+    Appliances: list[Appliance] = Field(default_factory=list)
 
 
 class Hub(BaseModel):
     HubId: str
-    Name: Optional[str] = Field(None, alias="HubName")
-    FriendlyName: Optional[str] = None
+    Name: str | None = Field(None, alias="HubName")
+    FriendlyName: str | None = None
 
 
 class TimerPeriod(BaseModel):
@@ -50,13 +49,13 @@ class TimerModeSettings(BaseModel):
     HubId: str
     ApplianceId: str
     TimerMode: int
-    TimerPeriods: List[TimerPeriod] = Field(default_factory=list)
+    TimerPeriods: list[TimerPeriod] = Field(default_factory=list)
 
 
 class UserContext(BaseModel):
     Id: str
-    EmailAddress: Optional[str] = None
-    Name: Optional[str] = None
+    EmailAddress: str | None = None
+    Name: str | None = None
 
 
 class ApplianceStatus(BaseModel):
@@ -65,25 +64,25 @@ class ApplianceStatus(BaseModel):
     HubId: str
     ApplianceId: str
     ZoneId: str
-    StatusTwo: Optional[int] = None
-    ApplianceModes: Optional[int] = None
-    RoomTemperature: Optional[float] = None
-    ActiveSetPointTemperature: Optional[int] = None
-    NormalTemperature: Optional[float] = None
-    AwayDateTime: Optional[str] = None
-    AwayTemperature: Optional[float] = None
-    BoostDuration: Optional[int] = None
-    BoostTemperature: Optional[float] = None
-    OpenWindowEnabled: Optional[bool] = None
-    EcoStartEnabled: Optional[bool] = None
-    SetbackEnabled: Optional[bool] = None
-    SetbackEnabledInStatusFrame: Optional[bool] = None
-    SetbackTemperature: Optional[float] = None
-    ComfortStatus: Optional[bool] = None
-    AvailableHotWater: Optional[float] = None
-    LockStatus: Optional[int] = None
-    ErrorCode: Optional[str] = None
-    WarningCode: Optional[str] = None
+    StatusTwo: int | None = None
+    ApplianceModes: int | None = None
+    RoomTemperature: float | None = None
+    ActiveSetPointTemperature: int | None = None
+    NormalTemperature: float | None = None
+    AwayDateTime: str | None = None
+    AwayTemperature: float | None = None
+    BoostDuration: int | None = None
+    BoostTemperature: float | None = None
+    OpenWindowEnabled: bool | None = None
+    EcoStartEnabled: bool | None = None
+    SetbackEnabled: bool | None = None
+    SetbackEnabledInStatusFrame: bool | None = None
+    SetbackTemperature: float | None = None
+    ComfortStatus: bool | None = None
+    AvailableHotWater: float | None = None
+    LockStatus: int | None = None
+    ErrorCode: str | None = None
+    WarningCode: str | None = None
 
 
 class ApplianceModeSettings(BaseModel):
