@@ -48,8 +48,8 @@ class DimplexControl:
     def __init__(
         self,
         session: aiohttp.ClientSession,
-        refresh_token: Optional[str] = None,
-        access_token: Optional[str] = None,
+        refresh_token: str | None = None,
+        access_token: str | None = None,
         expires_at: float = 0,
     ):
         """Initialize the client."""
@@ -59,7 +59,7 @@ class DimplexControl:
         if access_token:
             token_data["access_token"] = access_token
         if expires_at:
-            token_data["expires_at"] = expires_at
+            token_data["expires_at"] = expires_at  # type: ignore[assignment]
 
         self._session = session
         self.auth = AuthManager(session, token_data)
@@ -69,7 +69,7 @@ class DimplexControl:
         """Check if authenticated."""
         return self.auth.is_authenticated
 
-    async def _request(self, method: str, endpoint: str, **kwargs) -> Dict:
+    async def _request(self, method: str, endpoint: str, **kwargs) -> dict:
         """Make an authenticated request."""
         token = await self.auth.get_access_token()
         headers = kwargs.pop("headers", {})
@@ -106,13 +106,13 @@ class DimplexControl:
             _LOGGER.error("Connection error during API request: %s", e)
             raise DimplexConnectionError(f"Connection error: {e}") from e
 
-    async def get_hubs(self) -> List[Hub]:
+    async def get_hubs(self) -> list[Hub]:
         """Get all hubs for the user."""
         data = await self._request("GET", "/Hubs/GetUserHubs")
         # Log analysis shows list of objects
         return [Hub(**h) for h in data]
 
-    async def get_hub_zones(self, hub_id: str) -> List[Zone]:
+    async def get_hub_zones(self, hub_id: str) -> list[Zone]:
         """Get zones and appliances for a hub."""
         data = await self._request("GET", "/Zones/GetZonesAndAppliancesForHubId", params={"HubId": hub_id})
         return [Zone(**z) for z in data]
@@ -123,7 +123,7 @@ class DimplexControl:
         data = await self._request("POST", "/Zones/GetZone", json=payload)
         return Zone(**data)
 
-    async def get_appliance_overview(self, hub_id: str, appliance_ids: List[str]) -> List[ApplianceStatus]:
+    async def get_appliance_overview(self, hub_id: str, appliance_ids: list[str]) -> list[ApplianceStatus]:
         """Get status overview for specific appliances."""
         payload = {"HubId": hub_id, "ApplianceIds": appliance_ids}
         data = await self._request("POST", "/RemoteControl/GetApplianceOverview", json=payload)
@@ -173,18 +173,18 @@ class DimplexControl:
         pass
 
     async def set_appliance_mode(
-        self, hub_id: str, appliance_ids: List[str], mode_settings: ApplianceModeSettings
+        self, hub_id: str, appliance_ids: list[str], mode_settings: ApplianceModeSettings
     ) -> None:
         """Set appliance mode (Boost, Away, etc.)."""
         payload = {"Settings": mode_settings.dict(), "HubId": hub_id, "ApplianceIds": appliance_ids}
         await self._request("POST", "/RemoteControl/SetApplianceMode", json=payload)
 
-    async def set_eco_start(self, hub_id: str, appliance_ids: List[str], enable: bool) -> None:
+    async def set_eco_start(self, hub_id: str, appliance_ids: list[str], enable: bool) -> None:
         """Enable/Disable EcoStart."""
         payload = {"Enable": enable, "HubId": hub_id, "ApplianceIds": appliance_ids}
         await self._request("POST", "/RemoteControl/SetEcoStart", json=payload)
 
-    async def set_open_window_detection(self, hub_id: str, appliance_ids: List[str], enable: bool) -> None:
+    async def set_open_window_detection(self, hub_id: str, appliance_ids: list[str], enable: bool) -> None:
         """Enable/Disable Open Window Detection."""
         payload = {"Enable": enable, "HubId": hub_id, "ApplianceIds": appliance_ids}
         await self._request("POST", "/RemoteControl/SetOpenWindowDetection", json=payload)
