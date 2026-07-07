@@ -3,7 +3,6 @@ import logging
 import os
 import re
 import time
-from typing import Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
@@ -24,11 +23,11 @@ _LOGGER = logging.getLogger(__name__)
 class AuthManager:
     """Manages authentication for Dimplex Control."""
 
-    def __init__(self, session: aiohttp.ClientSession, token_data: Optional[Dict] = None):
+    def __init__(self, session: aiohttp.ClientSession, token_data: dict | None = None):
         """Initialize the auth manager."""
         self._session = session
-        self._access_token: Optional[str] = token_data.get("access_token") if token_data else None
-        self._refresh_token: Optional[str] = token_data.get("refresh_token") if token_data else None
+        self._access_token: str | None = token_data.get("access_token") if token_data else None
+        self._refresh_token: str | None = token_data.get("refresh_token") if token_data else None
         self._expires_at: float = token_data.get("expires_at", 0) if token_data else 0
 
     @property
@@ -42,11 +41,11 @@ class AuthManager:
             raise DimplexAuthError("No refresh token available. User must authenticate first.")
 
         if self.is_authenticated:
-            return self._access_token
+            return self._access_token  # type: ignore[return-value]
 
         # Token expired or missing, try refresh
         await self.refresh_tokens()
-        return self._access_token
+        return self._access_token  # type: ignore[return-value]
 
     async def refresh_tokens(self) -> None:
         """Refresh the access token using the refresh token."""
@@ -68,7 +67,7 @@ class AuthManager:
             data = await resp.json()
             self._update_tokens(data)
 
-    def _update_tokens(self, data: Dict) -> None:
+    def _update_tokens(self, data: dict) -> None:
         """Update internal token state from API response."""
         self._access_token = data.get("access_token")
         self._refresh_token = data.get("refresh_token")
@@ -318,12 +317,12 @@ class AuthManager:
         _LOGGER.info("Tokens saved to %s", file_path)
 
     @classmethod
-    def load_tokens(cls, file_path: str) -> Optional[Dict]:
+    def load_tokens(cls, file_path: str) -> dict | None:
         """Load tokens from a JSON file."""
         if not os.path.exists(file_path):
             return None
         try:
-            with open(file_path, "r") as f:
+            with open(file_path) as f:
                 return json.load(f)
         except Exception as e:
             _LOGGER.error("Failed to load tokens from %s: %s", file_path, e)
