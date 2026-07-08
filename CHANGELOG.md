@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.3.0...v0.4.0) (2026-07-08)
+
+
+### Features
+
+* add TsiEnergyReport endpoint + telemetry parser ([#16](https://github.com/KRoperUK/dimplex-controller-py/issues/16)) ([c125f19](https://github.com/KRoperUK/dimplex-controller-py/commit/c125f190bbafa337262707d9d7bbf00fd5f12900))
+
 ## [0.3.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.2.1...v0.3.0) (2026-06-22)
 
 
