@@ -211,9 +211,7 @@ async def test_get_tsi_energy_report(aresponses):
 
     assert report.HubId == "hub-1"
     assert set(report.ApplianceTelemetryData) == {"a-1", "a-2"}
-    assert report.ApplianceTelemetryData["a-1"] == [
-        {"timestamp": "2026-06-01T00:00:00Z", "value": 0.1}
-    ]
+    assert report.ApplianceTelemetryData["a-1"] == [{"timestamp": "2026-06-01T00:00:00Z", "value": 0.1}]
     assert report.ApplianceTelemetryData["a-2"] == []
 
 

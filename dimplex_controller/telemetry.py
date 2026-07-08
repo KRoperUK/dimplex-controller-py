@@ -9,8 +9,9 @@ sends into ``(timestamp, value)`` tuples.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime, timezone
-from typing import Any, Iterable
+from typing import Any
 
 # Keys the cloud has been observed using, in priority order. The first match
 # wins. Case-insensitive lookup is done by lowercasing the dict before
@@ -46,7 +47,7 @@ def _coerce_timestamp(raw: Any) -> datetime | None:
         return None
     if isinstance(raw, datetime):
         return raw
-    if isinstance(raw, (int, float)):
+    if isinstance(raw, int | float):
         ts = float(raw)
         if ts > 1e12:
             ts = ts / 1000.0
@@ -71,7 +72,7 @@ def _coerce_value(raw: Any) -> float | None:
         return None
     if isinstance(raw, bool):
         return None
-    if isinstance(raw, (int, float)):
+    if isinstance(raw, int | float):
         return float(raw)
     if isinstance(raw, str):
         try:
@@ -120,7 +121,7 @@ def parse_telemetry_points(points: Any) -> list[tuple[datetime | None, float]]:
                     ts = _coerce_timestamp(raw)
                 elif key in _VALUE_KEYS and value is None:
                     value = _coerce_value(raw)
-        elif isinstance(point, (list, tuple)) and len(point) == 2:
+        elif isinstance(point, list | tuple) and len(point) == 2:
             ts = _coerce_timestamp(point[0])
             value = _coerce_value(point[1])
         else:

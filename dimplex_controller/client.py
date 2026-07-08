@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
 
 import aiohttp
 
@@ -191,10 +190,10 @@ class DimplexControl:
 
     async def get_tsi_energy_report(
         self,
-        hub_id: Optional[str] = None,
+        hub_id: str | None = None,
         report_type: int = 1,
         interval: str = DEFAULT_TSI_INTERVAL,
-        start_date: Optional[str] = None,
+        start_date: str | None = None,
         include_previous_period: bool = False,
         days_back: int = DEFAULT_TSI_REPORT_DAYS,
     ) -> TsiEnergyReport:
@@ -220,9 +219,7 @@ class DimplexControl:
             "StartDate": start_date,
             "IncludePreviousPeriod": include_previous_period,
         }
-        data = await self._request(
-            "POST", "/Reports/GetTsiEnergyReportDataForHub", json=payload
-        )
+        data = await self._request("POST", "/Reports/GetTsiEnergyReportDataForHub", json=payload)
         return TsiEnergyReport(
             HubId=(hub_id or data.get("HubId", "")),
             ApplianceTelemetryData=data.get("ApplianceTelemetryData", {}) or {},
