@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta, timezone
 
 import aiohttp
 
@@ -20,11 +21,24 @@ from .models import (
     ApplianceStatus,
     Hub,
     TimerModeSettings,
+    TsiEnergyReport,
     UserContext,
     Zone,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Default lookback when the caller does not pin a start date. The energy
+# endpoint is paginated server-side; 30 days is a reasonable default that
+# keeps the response small while still giving the caller a meaningful window.
+DEFAULT_TSI_REPORT_DAYS = 30
+DEFAULT_TSI_INTERVAL = "01:00:00"
+
+
+def _iso_utc_days_ago(days: int) -> str:
+    """Return an ISO-8601 UTC timestamp ``days`` before now (no microseconds)."""
+    dt = datetime.now(timezone.utc) - timedelta(days=days)
+    return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 class DimplexControl:
@@ -173,3 +187,40 @@ class DimplexControl:
         """Enable/Disable Open Window Detection."""
         payload = {"Enable": enable, "HubId": hub_id, "ApplianceIds": appliance_ids}
         await self._request("POST", "/RemoteControl/SetOpenWindowDetection", json=payload)
+
+    async def get_tsi_energy_report(
+        self,
+        hub_id: str | None = None,
+        report_type: int = 1,
+        interval: str = DEFAULT_TSI_INTERVAL,
+        start_date: str | None = None,
+        include_previous_period: bool = False,
+        days_back: int = DEFAULT_TSI_REPORT_DAYS,
+    ) -> TsiEnergyReport:
+        """Fetch the Time Series Insights energy report for a hub.
+
+        Returns a :class:`~dimplex_controller.models.TsiEnergyReport`. The
+        cloud response is the same regardless of ``hub_id`` (the field is
+        informational), so ``hub_id`` is only required to populate the
+        returned model. Each per-appliance list is left as the raw payload —
+        use :func:`dimplex_controller.telemetry.parse_telemetry_points` to
+        normalise the points into ``(timestamp, value)`` tuples.
+
+        When the hub has no metered appliances (e.g. non-QRAD heaters, or a
+        quiet summer hub) the per-appliance lists come back empty; that is
+        treated as success, not an error.
+        """
+        if start_date is None:
+            start_date = _iso_utc_days_ago(days_back)
+
+        payload = {
+            "TsiReportType": report_type,
+            "Interval": interval,
+            "StartDate": start_date,
+            "IncludePreviousPeriod": include_previous_period,
+        }
+        data = await self._request("POST", "/Reports/GetTsiEnergyReportDataForHub", json=payload)
+        return TsiEnergyReport(
+            HubId=(hub_id or data.get("HubId", "")),
+            ApplianceTelemetryData=data.get("ApplianceTelemetryData", {}) or {},
+        )

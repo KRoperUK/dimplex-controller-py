@@ -176,3 +176,84 @@ async def test_is_authenticated(aresponses):
         client.auth._access_token = "fake_access"
         client.auth._expires_at = 9999999999
         assert client.is_authenticated
+
+
+# ---------------------------------------------------------------------------
+# get_tsi_energy_report
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_tsi_energy_report(aresponses):
+    """The Tsi energy report is parsed into a TsiEnergyReport model."""
+    body = (
+        '{"HubId":"hub-1",'
+        '"ApplianceTelemetryData":{"a-1":[{"timestamp":"2026-06-01T00:00:00Z","value":0.1}],'
+        '"a-2":[]}}'
+    )
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/Reports/GetTsiEnergyReportDataForHub",
+        "POST",
+        aresponses.Response(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            body=body,
+        ),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(session, refresh_token="fake_refresh")
+        client.auth._access_token = "fake_access"
+        client.auth._expires_at = 9999999999
+
+        report = await client.get_tsi_energy_report("hub-1")
+
+    assert report.HubId == "hub-1"
+    assert set(report.ApplianceTelemetryData) == {"a-1", "a-2"}
+    assert report.ApplianceTelemetryData["a-1"] == [{"timestamp": "2026-06-01T00:00:00Z", "value": 0.1}]
+    assert report.ApplianceTelemetryData["a-2"] == []
+
+
+@pytest.mark.asyncio
+async def test_get_tsi_energy_report_no_hub(aresponses):
+    """Hub id is not required — the model falls back to the response value."""
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/Reports/GetTsiEnergyReportDataForHub",
+        "POST",
+        aresponses.Response(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            body='{"HubId":"hub-9","ApplianceTelemetryData":{}}',
+        ),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(session, refresh_token="fake_refresh")
+        client.auth._access_token = "fake_access"
+        client.auth._expires_at = 9999999999
+
+        report = await client.get_tsi_energy_report()
+
+    assert report.HubId == "hub-9"
+    assert report.ApplianceTelemetryData == {}
+
+
+@pytest.mark.asyncio
+async def test_get_tsi_energy_report_error(aresponses):
+    """HTTP errors are raised as DimplexApiError."""
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/Reports/GetTsiEnergyReportDataForHub",
+        "POST",
+        aresponses.Response(status=500, body="boom"),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(session, refresh_token="fake_refresh")
+        client.auth._access_token = "fake_access"
+        client.auth._expires_at = 9999999999
+
+        with pytest.raises(DimplexApiError):
+            await client.get_tsi_energy_report("hub-1")

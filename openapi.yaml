@@ -158,6 +158,19 @@ components:
         Frequency:
           type: integer
 
+    TsiEnergyReport:
+      type: object
+      properties:
+        HubId:
+          type: string
+        ApplianceTelemetryData:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: object
+              description: A single telemetry point. Shape varies by firmware; clients should treat as opaque and normalise.
+
     UserContext:
       type: object
       properties:
@@ -368,3 +381,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/UserContext"
+
+  /Reports/GetTsiEnergyReportDataForHub:
+    post:
+      summary: Get Time Series Insights energy report for a hub
+      description: |
+        Returns telemetry points (kWh energy) for every appliance on a hub.
+        The per-appliance list is empty when the hub has no metered appliances
+        or when the heaters are not running. The shape of each telemetry point
+        is not documented and varies by firmware — clients should normalise
+        via `dimplex_controller.telemetry.parse_telemetry_points`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [TsiReportType, Interval, StartDate, IncludePreviousPeriod]
+              properties:
+                TsiReportType:
+                  type: integer
+                  description: |
+                    Report variant. Observed values: 1 (kWh energy). Other
+                    values are accepted by the server but their meaning is
+                    not yet documented.
+                Interval:
+                  type: string
+                  description: ISO-8601 duration (e.g. `00:10:00`, `01:00:00`, `1.00:00:00`).
+                StartDate:
+                  type: string
+                  format: date-time
+                IncludePreviousPeriod:
+                  type: boolean
+      responses:
+        "200":
+          description: Telemetry data per appliance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TsiEnergyReport"
