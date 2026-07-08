@@ -7,3 +7,4 @@ dimplex_tokens.json
 .pytest_cache
 .ruff_cache
 .commandcode/
+.coverage*
