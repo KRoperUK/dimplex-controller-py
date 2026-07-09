@@ -27,6 +27,7 @@ _TIMESTAMP_KEYS = (
     "start",
 )
 _VALUE_KEYS = (
+    "t1",
     "value",
     "kwh",
     "energy",
