@@ -225,3 +225,104 @@ def test_appliance_mode_settings_full():
     assert settings.Time == 120
     assert settings.NumberOfDays == 7
     assert settings.Frequency == 2
+
+
+def test_automatic_provisioning_parsing():
+    """AUTOMATIC_PROVISIONING JSON is decoded into a typed model."""
+    raw = '{"bottomElementPowerRating":"0.74","topElementPowerRating":"1.48","ratedPower":2.22}'
+    appliance = Appliance(
+        ApplianceId="a1",
+        ApplianceType="Quantum",
+        ZoneId="z1",
+        FriendlyName="Room",
+        ZoneName="Room",
+        ProductModelExtensions={"AUTOMATIC_PROVISIONING": raw},
+    )
+    provisioning = appliance.automatic_provisioning
+    assert provisioning is not None
+    assert provisioning.bottom_element_power_rating == 0.74
+    assert provisioning.top_element_power_rating == 1.48
+    assert provisioning.rated_power == 2.22
+
+
+def test_automatic_provisioning_missing():
+    """Appliances without extensions return None."""
+    appliance = Appliance(
+        ApplianceId="a1",
+        ApplianceType="Quantum",
+        ZoneId="z1",
+        FriendlyName="Room",
+        ZoneName="Room",
+    )
+    assert appliance.automatic_provisioning is None
+
+
+def test_automatic_provisioning_invalid_json():
+    """Malformed extension JSON is handled gracefully."""
+    appliance = Appliance(
+        ApplianceId="a1",
+        ApplianceType="Quantum",
+        ZoneId="z1",
+        FriendlyName="Room",
+        ZoneName="Room",
+        ProductModelExtensions={"AUTOMATIC_PROVISIONING": "not-json"},
+    )
+    assert appliance.automatic_provisioning is None
+
+
+def test_appliance_with_firmware_and_telemetry():
+    """Appliance parses firmware and telemetry metadata from the cloud."""
+    appliance = Appliance(
+        ApplianceId="a1",
+        ApplianceType="Quantum",
+        ZoneId="z1",
+        FriendlyName="Room",
+        ZoneName="Room",
+        FirmwareVersion="6",
+        SeriesIdentifier="G12",
+        SecurityCode="123456",
+        LastTelemDate="2026-06-12T09:45:34.89Z",
+    )
+    assert appliance.FirmwareVersion == "6"
+    assert appliance.SeriesIdentifier == "G12"
+    assert appliance.SecurityCode == "123456"
+    assert appliance.LastTelemDate is not None
+
+
+def test_zone_with_room_type_and_icon():
+    """Zone parses optional icon and room type fields."""
+    zone = Zone(
+        ZoneId="z1",
+        ZoneName="Living Room",
+        HubId="h1",
+        ZoneType="Heating",
+        RoomType="Lounge",
+        Icon="ic_sofa",
+        IconColor="#D7324F",
+    )
+    assert zone.RoomType == "Lounge"
+    assert zone.Icon == "ic_sofa"
+    assert zone.IconColor == "#D7324F"
+
+
+def test_hub_with_connection_state():
+    """Hub parses the extended fields returned by GetUserHubs."""
+    hub = Hub(
+        HubId="h1",
+        HubName="Home",
+        FriendlyName="7 Tadmore Close",
+        ConnectionState=1,
+        FirmwareVersion="129.12.5",
+        NumberOfZones=3,
+        NumberOfAppliances=3,
+        IsServiceModeEnabled=False,
+        LastTelemDate="2026-06-12T09:45:34.89Z",
+    )
+    assert hub.Name == "Home"
+    assert hub.FriendlyName == "7 Tadmore Close"
+    assert hub.ConnectionState == 1
+    assert hub.FirmwareVersion == "129.12.5"
+    assert hub.NumberOfZones == 3
+    assert hub.NumberOfAppliances == 3
+    assert hub.IsServiceModeEnabled is False
+    assert hub.LastTelemDate is not None
