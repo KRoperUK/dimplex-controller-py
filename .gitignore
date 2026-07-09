@@ -8,3 +8,4 @@ dimplex_tokens.json
 .ruff_cache
 .commandcode/
 .coverage*
+dist/
