@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.2](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.4.1...v0.4.2) (2026-07-09)
+
+
+### Bug Fixes
+
+* PyPI publish workflow — use release/v1, verbose logging, correct env URL ([#24](https://github.com/KRoperUK/dimplex-controller-py/issues/24)) ([db472e9](https://github.com/KRoperUK/dimplex-controller-py/commit/db472e9c7697c2af97b56d3b65756023cd50eae8))
+* use release/v1 tag and correct pypi environment URL ([db472e9](https://github.com/KRoperUK/dimplex-controller-py/commit/db472e9c7697c2af97b56d3b65756023cd50eae8))
+
 ## [0.4.1](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.4.0...v0.4.1) (2026-07-09)
 
 
