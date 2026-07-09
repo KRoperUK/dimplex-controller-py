@@ -1,66 +1,92 @@
 # Dimplex Controller Python Client
 
-[![PyPI](https://img.shields.io/pypi/v/dimplex-controller.svg)](https://pypi.org/project/dimplex-controller/)
-[![Tests](https://github.com/KRoperUK/dimplex-controller-py/actions/workflows/tests.yml/badge.svg)](https://github.com/KRoperUK/dimplex-controller-py/actions)
-[![Downloads](https://img.shields.io/pypi/dm/dimplex-controller.svg)](https://pypi.org/project/dimplex-controller/)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/downloads/)
+[![PyPI version](https://img.shields.io/pypi/v/dimplex-controller.svg)](https://pypi.org/project/dimplex-controller/)
+[![Python versions](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![GitHub](https://img.shields.io/badge/GitHub-Repository-black?logo=github)](https://github.com/KRoperUK/dimplex-controller-py)
+[![CI Tests](https://github.com/KRoperUK/dimplex-controller-py/actions/workflows/tests.yml/badge.svg)](https://github.com/KRoperUK/dimplex-controller-py/actions)
+[![Downloads](https://img.shields.io/pypi/dm/dimplex-controller.svg)](https://pypi.org/project/dimplex-controller/)
 
-A Python asyncio client for controlling Dimplex heating systems (GDHV IoT).
+<p align="center">
+  <strong>Async Python client for controlling Glen Dimplex Heating &amp; Ventilation (GDHV) appliances via the Dimplex cloud API.</strong>
+</p>
+
+---
+
+## What does this do?
+
+`dimplex-controller-py` is an asynchronous Python client that talks to the GDHV IoT cloud platform. It handles Azure B2C authentication (including automatic token refresh), discovers your Hubs, Zones and Appliances, and lets you read telemetry and send control commands — all from a script or a larger application.
+
+It is the engine behind the [Dimplex Hub Home Assistant integration](https://github.com/KRoperUK/dimplex-controller-hass) and is published to PyPI as [`dimplex-controller`](https://pypi.org/project/dimplex-controller/).
+
+> **Note:** This is an unofficial library and is not affiliated with or endorsed by Glen Dimplex Heating & Ventilation (GDHV). Use it at your own risk.
+
+## Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Usage guide](#usage-guide)
+  - [Authentication](#authentication)
+  - [Discovery](#discovery)
+  - [Reading status](#reading-status)
+  - [Sending control commands](#sending-control-commands)
+  - [Energy reports](#energy-reports)
+- [Configuration](#configuration)
+- [API reference](#api-reference)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [Changelog](#changelog)
 
 ## Features
 
-- **Authentication**: Easy login flow and automatic token refresh (Azure B2C).
-- **Discovery**: List Hubs, Zones, and Appliances associated with your account.
-- **Detailed Status**: Fetch real-time data including room temperature, setpoints, comfort status, and active boost settings.
-- **Control**:
-  - Set operation modes (Manual, Timer, Frost Protection).
-  - Activate **Boost** and **Away** modes.
-  - Toggle **EcoStart** and **Open Window Detection**.
-  - Program heating schedules (Timer Periods).
+- **Authentication** — Azure B2C login with automatic token refresh and secure token persistence.
+- **Discovery** — List Hubs, Zones and Appliances linked to your account.
+- **Real-time status** — Fetch room temperature, setpoints, comfort status, boost/away modes and EcoStart state.
+- **Control** — Set operation modes, activate Boost and Away, toggle EcoStart and Open Window Detection, and programme timer schedules.
+- **Energy telemetry** — Pull Time Series Insights (TSI) energy reports with a robust telemetry parser that adapts to varying firmware formats.
 
 ## Installation
 
-This project is managed with Poetry.
+### From PyPI (recommended)
 
 ```bash
-git clone <repo-url>
+pip install dimplex-controller
+```
+
+### From source
+
+```bash
+git clone https://github.com/KRoperUK/dimplex-controller-py.git
 cd dimplex-controller-py
-poetry install
+pip install .
 ```
 
-## Getting Started
-
-### 1. Initial Authentication
-Due to the nature of the Azure B2C flow, you must perform the initial login manually to capture an authorization code.
-
-Run the demo script to guide you through the process:
+### Development install
 
 ```bash
-poetry run python demo.py
+git clone https://github.com/KRoperUK/dimplex-controller-py.git
+cd dimplex-controller-py
+pip install -e ".[dev]"
 ```
 
-Follow the on-screen instructions. Once successful, a `dimplex_tokens.json` file will be created, allowing the library to authenticate automatically in the future.
+> **Requires:** Python 3.10 or later.
 
-### 2. Basic Usage
+## Quick start
+
+The library uses `asyncio` and `aiohttp`. Here is the smallest example that lists your Hubs and Zones:
 
 ```python
 import asyncio
-import aiohttp
+from aiohttp import ClientSession
 from dimplex_controller import DimplexControl
 
-async def main():
-    async with aiohttp.ClientSession() as session:
-        # Pass tokens from dimplex_tokens.json or just the refresh_token
+async def main() -> None:
+    async with ClientSession() as session:
         client = DimplexControl(session, refresh_token="YOUR_REFRESH_TOKEN")
 
-        # Get Hubs
         hubs = await client.get_hubs()
         for hub in hubs:
             print(f"Hub: {hub.Name}")
-
-            # Get Zones and Appliances
             zones = await client.get_hub_zones(hub.HubId)
             for zone in zones:
                 print(f"  Zone: {zone.ZoneName}")
@@ -69,19 +95,52 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-### 3. Advanced Operations
+## Usage guide
 
-#### Get Real-time Status
-```python
-# Fetch status for a list of appliance IDs
-status_list = await client.get_appliance_overview(hub_id, ["appliance_id_1", "appliance_id_2"])
+### Authentication
 
-for status in status_list:
-    print(f"Temp: {status.RoomTemperature}°C, Target: {status.ActiveSetPointTemperature}°C")
-    print(f"EcoStart: {status.EcoStartEnabled}")
+Dimplex uses Azure AD B2C. You cannot log in purely programmatically with just a username and password — the library must first capture a short-lived authorisation code.
+
+The recommended approach is to run the included demo script once:
+
+```bash
+python demo.py
 ```
 
-#### Control Features
+The script walks you through opening a browser, signing in, and pasting the resulting redirect URL back into the terminal. On success, it saves a `dimplex_tokens.json` file in the current working directory.
+
+Subsequent runs read the refresh token from that file automatically. You can also pass the refresh token directly to `DimplexControl` if you prefer to manage storage yourself.
+
+### Discovery
+
+```python
+hubs = await client.get_hubs()
+for hub in hubs:
+    print(f"Hub: {hub.Name} ({hub.HubId})")
+    zones = await client.get_hub_zones(hub.HubId)
+    for zone in zones:
+        print(f"  Zone: {zone.ZoneName} ({zone.ZoneId})")
+        appliances = zone.Appliances
+        for appliance in appliances:
+            print(f"    Appliance: {appliance.ApplianceId}")
+```
+
+### Reading status
+
+```python
+from dimplex_controller.models import ApplianceStatus
+
+status_list = await client.get_appliance_overview(hub_id, [appliance_id_1, appliance_id_2])
+
+for status in status_list:
+    print(f"Room temperature: {status.RoomTemperature}°C")
+    print(f"Target temperature: {status.ActiveSetPointTemperature}°C")
+    print(f"EcoStart enabled: {status.EcoStartEnabled}")
+    print(f"Comfort status: {status.ComfortStatus}")
+```
+
+### Sending control commands
+
 ```python
 from dimplex_controller.models import ApplianceModeSettings
 
@@ -96,11 +155,106 @@ boost_settings = ApplianceModeSettings(ApplianceModes=16, Status=1, Temperature=
 await client.set_appliance_mode(hub_id, [appliance_id], boost_settings)
 ```
 
-## Development & API Reference
+### Energy reports
 
-- **`openapi.yaml`**: This file contains the most complete technical specification of the API discovered so far. It includes all known endpoints, request bodies, and response schemas.
-- **Traffic Logs**: If you identify new features in the mobile app, capture the traffic and add the endpoints to `openapi.yaml` and the `DimplexControl` client.
+```python
+from dimplex_controller import parse_telemetry_points
 
-## Disclaimer
+report = await client.get_tsi_energy_report(hub_id)
+for appliance_id, telemetry in report.telemetry.items():
+    points = parse_telemetry_points(telemetry)
+    for timestamp, value in points:
+        print(f"{appliance_id}: {value} kWh at {timestamp}")
+```
 
-This is an unofficial library and is not affiliated with or endorsed by Glen Dimplex Heating & Ventilation (GDHV). Use it at your own risk.
+The `parse_telemetry_points` helper normalises arbitrary API response shapes (varying firmware formats) into `(timestamp, value)` tuples.
+
+## Configuration
+
+| Environment variable | Purpose |
+|---------------------|---------|
+| `DIMPLEX_TOKENS_FILE` | Path to the JSON token store. Defaults to `dimplex_tokens.json`. |
+
+## API reference
+
+### `DimplexControl`
+
+Main client class. Construct with an `aiohttp.ClientSession` and a `refresh_token`.
+
+| Method | Description |
+|--------|-------------|
+| `get_hubs()` | Returns `list[Hub]`. |
+| `get_hub_zones(hub_id)` | Returns `list[Zone]` for a Hub. |
+| `get_zone(hub_id, zone_id)` | Returns a single `Zone`. |
+| `get_appliance_overview(hub_id, appliance_ids)` | Returns `list[ApplianceStatus]`. |
+| `get_user_context()` | Returns `UserContext`. |
+| `get_appliance_features(hub_id, appliance_ids)` | Returns raw appliance feature data. |
+| `set_mode(hub_id, appliance_ids, mode, temperature)` | Set operation mode. |
+| `set_target_temperature(...)` | Placeholder for future target temperature control. |
+| `set_appliance_mode(hub_id, appliance_ids, settings)` | Send full mode settings. |
+| `set_eco_start(hub_id, appliance_ids, enabled)` | Toggle EcoStart. |
+| `set_open_window_detection(hub_id, appliance_ids, enabled)` | Toggle Open Window Detection. |
+| `get_tsi_energy_report(hub_id)` | Returns `TsiEnergyReport`. |
+
+### Models
+
+- **`Hub`** — Hub metadata.
+- **`Zone`** — Zone metadata with linked Appliances.
+- **`Appliance`** — Appliance metadata.
+- **`ApplianceStatus`** — Live telemetry (room temperature, setpoints, comfort, etc.).
+- **`ApplianceModeSettings`** — Payload for mode changes.
+- **`TimerPeriod`** / **`TimerModeSettings`** — Timer schedule structures.
+- **`UserContext`** — Authenticated user profile.
+- **`TsiEnergyReport`** — Energy telemetry keyed by appliance.
+
+### Exceptions
+
+- **`DimplexError`** — Base exception.
+- **`DimplexAuthError`** — Authentication or token errors.
+- **`DimplexApiError`** — API returned a non-success status. Contains `status` and `message`.
+- **`DimplexConnectionError`** — Network-level failures.
+
+## Troubleshooting
+
+### Authentication failures
+
+- Verify that the refresh token in `dimplex_tokens.json` has not expired. Delete the file and re-run `demo.py` to capture a fresh one.
+- Ensure your network can reach `login.microsoftonline.com` and the Dimplex API endpoints.
+- If you have multi-factor authentication (MFA) enabled on your Dimplex account, the headless flow should still work because it uses a browser session you control manually.
+
+### `DimplexAuthError`
+
+This means the API rejected the token. Common causes:
+- Token file is missing or corrupt.
+- The refresh token has expired (Azure B2C refresh tokens typically last 90 days).
+- The token was revoked from the Azure portal.
+
+**Fix:** Delete `dimplex_tokens.json` and re-run the `demo.py` flow.
+
+### `DimplexConnectionError`
+
+The library could not reach the GDHV API. Check:
+- Internet connectivity.
+- DNS resolution for `api.gdhv.io` (or whatever endpoint is configured in `const.py`).
+- No corporate firewall or proxy is blocking `HTTPS` traffic.
+
+### Telemetry parsing errors
+
+If `parse_telemetry_points` returns an empty list, the API likely returned an unexpected schema for your firmware version. Please open an issue with a redacted example of the raw response so the parser can be updated.
+
+### Rate limiting
+
+The GDHV cloud API has rate limits. If you hit them, back off for a few minutes before retrying. The library does not currently implement automatic retries with back-off.
+
+## Contributing
+
+Contributions are welcome! Please read the [contributing guidelines](CONTRIBUTING.md) before opening a pull request.
+
+Key points:
+- Use **Conventional Commits** (`feat:`, `fix:`, `chore:`, etc.) — this drives the automated changelog and PyPI releases.
+- Run `ruff check`, `ruff format --check` and `pytest` locally before pushing.
+- Pre-commit hooks are available — run `pre-commit install` once.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
