@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.1](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.4.0...v0.4.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* parse T1/TS energy telemetry keys from Dimplex cloud API ([#22](https://github.com/KRoperUK/dimplex-controller-py/issues/22)) ([4af7472](https://github.com/KRoperUK/dimplex-controller-py/commit/4af74722b6a7a350c0626ca2aa0841153d3d3abe))
+
 ## [0.4.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.3.0...v0.4.0) (2026-07-08)
 
 
