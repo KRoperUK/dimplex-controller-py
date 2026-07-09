@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/project/dimplex-controller/
+      url: https://pypi.org/p/dimplex-controller
     permissions:
       id-token: write
     steps:
@@ -35,4 +35,6 @@ jobs:
         run: poetry build
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@v1.13.0
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          verbose: true
