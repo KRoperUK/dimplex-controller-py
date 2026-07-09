@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from dimplex_controller.telemetry import parse_telemetry_points
+from dimplex_controller.telemetry import VALUE_KEY_T2, parse_telemetry_points
 
 
 def test_empty_and_bad_input():
@@ -112,3 +112,29 @@ def test_t1_and_ts_keys():
         (datetime(2026, 1, 2, tzinfo=timezone.utc), 8.02),
         (datetime(2026, 1, 3, tzinfo=timezone.utc), 7.91),
     ]
+
+
+def test_t2_energy_register():
+    """The secondary energy register ``T2`` can be extracted independently."""
+    out = parse_telemetry_points(
+        [
+            {"TS": 1767225600, "T1": 7.46, "T2": 0.36},
+            {"TS": 1767312000, "T1": 8.02, "T2": 0.18},
+            {"TS": 1767398400, "T1": 7.91},
+        ],
+        value_keys=VALUE_KEY_T2,
+    )
+    assert out == [
+        (datetime(2026, 1, 1, tzinfo=timezone.utc), 0.36),
+        (datetime(2026, 1, 2, tzinfo=timezone.utc), 0.18),
+    ]
+
+
+def test_t2_only_points():
+    """When only ``T2`` is present, default parsing falls back to it."""
+    out = parse_telemetry_points(
+        [
+            {"TS": 1767225600, "T2": 0.36},
+        ]
+    )
+    assert out == [(datetime(2026, 1, 1, tzinfo=timezone.utc), 0.36)]

@@ -1,6 +1,22 @@
+import json
 from datetime import datetime, time
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+class AutomaticProvisioning(BaseModel):
+    """Parsed contents of ``ProductModelExtensions.AUTOMATIC_PROVISIONING``.
+
+    The cloud stores this as a JSON string; :class:`Appliance` decodes it
+    automatically so callers can read the heater's electrical characteristics.
+    """
+
+    bottom_element_power_rating: float | None = Field(None, alias="bottomElementPowerRating")
+    top_element_power_rating: float | None = Field(None, alias="topElementPowerRating")
+    rated_power: float | None = Field(None, alias="ratedPower")
+    charge_capacity: float | None = Field(None, alias="chargeCapacity")
+    charge_element_resistance: float | None = Field(None, alias="chargeElementResistance")
+    power_offset: float | None = Field(None, alias="powerOffset")
 
 
 class Appliance(BaseModel):
@@ -14,6 +30,32 @@ class Appliance(BaseModel):
     IconColor: str | None = None
     InstallationDate: datetime | None = None
     HasConnectivity: bool | None = None
+    SecurityCode: str | None = None
+    LastTelemDate: datetime | None = None
+    SeriesIdentifier: str | None = None
+    FirmwareVersion: str | None = None
+    ProductModelExtensions: dict[str, str] | None = None
+
+    @field_validator("ProductModelExtensions", mode="before")
+    @classmethod
+    def _coerce_provisioning_extensions(cls, value):
+        """Keep the raw extension dict but normalise string values to strings."""
+        if value is None:
+            return None
+        if isinstance(value, dict):
+            return {str(k): v if isinstance(v, str) else json.dumps(v) for k, v in value.items()}
+        return value
+
+    @property
+    def automatic_provisioning(self) -> AutomaticProvisioning | None:
+        """Return the decoded AUTOMATIC_PROVISIONING payload, if present."""
+        raw = (self.ProductModelExtensions or {}).get("AUTOMATIC_PROVISIONING")
+        if not raw:
+            return None
+        try:
+            return AutomaticProvisioning.model_validate_json(raw)
+        except (json.JSONDecodeError, ValueError):
+            return None
 
 
 class Zone(BaseModel):
@@ -21,6 +63,10 @@ class Zone(BaseModel):
     ZoneName: str
     HubId: str
     ZoneType: str
+    RoomType: str | None = None
+    AppName: str | None = None
+    Icon: str | None = None
+    IconColor: str | None = None
     Appliances: list[Appliance] = Field(default_factory=list)
 
 
@@ -28,6 +74,30 @@ class Hub(BaseModel):
     HubId: str
     Name: str | None = Field(None, alias="HubName")
     FriendlyName: str | None = None
+    SecurityCode: str | None = None
+    AddressLine1: str | None = None
+    AddressLine2: str | None = None
+    TownCity: str | None = None
+    Postcode: str | None = None
+    County: str | None = None
+    Country: str | None = None
+    Latitude: float | None = None
+    Longitude: float | None = None
+    HubRegistrationDate: datetime | None = None
+    InstallationDate: datetime | None = None
+    LastTelemDate: datetime | None = None
+    TimeZoneId: int | None = None
+    TimeZoneName: str | None = None
+    NumberOfZones: int | None = None
+    NumberOfAppliances: int | None = None
+    IsServiceModeEnabled: bool | None = None
+    FirmwareVersion: str | None = None
+    ConnectionState: int | None = None
+    HubType: str | None = None
+    BluetoothName: str | None = None
+    PrimaryUserEmail: str | None = None
+    IsDefault: bool | None = None
+    RoleName: str | None = None
 
 
 class TimerPeriod(BaseModel):

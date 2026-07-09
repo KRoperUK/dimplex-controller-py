@@ -1,6 +1,6 @@
 """Telemetry parsing for the Dimplex Reports API.
 
-The response from `POST /Reports/GetTsiEnergyReportDataForHub` contains
+The response from ``POST /Reports/GetTsiEnergyReportDataForHub`` contains
 ``ApplianceTelemetryData``: a dict keyed by appliance id, with one list of
 ``telemetry points`` per appliance. The shape of each point is not documented
 and varies between firmware versions, so we normalise whatever the cloud
@@ -16,7 +16,7 @@ from typing import Any
 # Keys the cloud has been observed using, in priority order. The first match
 # wins. Case-insensitive lookup is done by lowercasing the dict before
 # scanning, so callers do not have to worry about casing.
-_TIMESTAMP_KEYS = (
+_DEFAULT_TIMESTAMP_KEYS = (
     "timestamp",
     "time",
     "ts",
@@ -26,7 +26,7 @@ _TIMESTAMP_KEYS = (
     "from",
     "start",
 )
-_VALUE_KEYS = (
+_DEFAULT_VALUE_KEYS = (
     "t1",
     "value",
     "kwh",
@@ -35,6 +35,17 @@ _VALUE_KEYS = (
     "energykwh",
     "amount",
     "v",
+    # Fallback for appliances that only report the secondary register.
+    "t2",
+)
+
+# Secondary energy register observed for some Quantum appliances. Points may
+# contain both ``T1`` and ``T2`` in the same payload.
+VALUE_KEY_T2 = (
+    "t2",
+    "value2",
+    "kwh2",
+    "energy2",
 )
 
 
@@ -92,10 +103,14 @@ def _iter_items(point: Any) -> Iterable[tuple[str, Any]] | None:
     if not isinstance(point, dict):
         return None
     lower = {str(k).lower(): v for k, v in point.items()}
-    return ((k, lower.get(k)) for k in (*_TIMESTAMP_KEYS, *_VALUE_KEYS))
+    return ((k, lower.get(k)) for k in (*_DEFAULT_TIMESTAMP_KEYS, *_DEFAULT_VALUE_KEYS, *VALUE_KEY_T2))
 
 
-def parse_telemetry_points(points: Any) -> list[tuple[datetime | None, float]]:
+def parse_telemetry_points(
+    points: Any,
+    *,
+    value_keys: tuple[str, ...] | None = None,
+) -> list[tuple[datetime | None, float]]:
     """Normalise a list of telemetry points into ``(timestamp, value)`` pairs.
 
     Each entry in ``points`` may be:
@@ -104,11 +119,18 @@ def parse_telemetry_points(points: Any) -> list[tuple[datetime | None, float]]:
     * a 2-element ``[timestamp, value]`` list or tuple
     * a bare scalar (treated as a cumulative value at an unknown timestamp)
 
+    ``value_keys`` overrides the value-key priority list. Use
+    :data:`VALUE_KEY_T2` to extract the secondary energy register when the
+    cloud returns both ``T1`` and ``T2`` in the same payload.
+
     Unparseable entries are silently skipped. The order of the input list is
     preserved.
     """
     if not isinstance(points, list):
         return []
+
+    value_key_order = value_keys if value_keys is not None else _DEFAULT_VALUE_KEYS
+    timestamp_keys = _DEFAULT_TIMESTAMP_KEYS
 
     out: list[tuple[datetime | None, float]] = []
     for point in points:
@@ -118,9 +140,9 @@ def parse_telemetry_points(points: Any) -> list[tuple[datetime | None, float]]:
         items = _iter_items(point)
         if items is not None:
             for key, raw in items:
-                if key in _TIMESTAMP_KEYS and ts is None:
+                if key in timestamp_keys and ts is None:
                     ts = _coerce_timestamp(raw)
-                elif key in _VALUE_KEYS and value is None:
+                elif key in value_key_order and value is None:
                     value = _coerce_value(raw)
         elif isinstance(point, list | tuple) and len(point) == 2:
             ts = _coerce_timestamp(point[0])
