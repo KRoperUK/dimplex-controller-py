@@ -96,3 +96,19 @@ def test_bad_timestamp_yields_none(bad):
     """An unparseable timestamp becomes ``None`` (value is still kept)."""
     out = parse_telemetry_points([{"timestamp": bad, "value": 0.1}])
     assert out == [(None, 0.1)]
+
+
+def test_t1_and_ts_keys():
+    """Real Dimplex API points use ``T1`` for kWh and ``TS`` for Unix-epoch timestamps."""
+    out = parse_telemetry_points(
+        [
+            {"TS": 1767225600, "T1": 7.46},
+            {"TS": 1767312000, "T1": 8.02},
+            {"TS": 1767398400, "T1": 7.91},
+        ]
+    )
+    assert out == [
+        (datetime(2026, 1, 1, tzinfo=timezone.utc), 7.46),
+        (datetime(2026, 1, 2, tzinfo=timezone.utc), 8.02),
+        (datetime(2026, 1, 3, tzinfo=timezone.utc), 7.91),
+    ]
