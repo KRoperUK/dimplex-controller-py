@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.5.0...v0.6.0) (2026-07-09)
+
+
+### Features
+
+* extend models and telemetry for additional sensor data ([#30](https://github.com/KRoperUK/dimplex-controller-py/issues/30)) ([daf92dc](https://github.com/KRoperUK/dimplex-controller-py/commit/daf92dc16fe19cf3cedd78e7b4e257c4bf56c5a6))
+
+
+### Documentation
+
+* overhaul README and add comprehensive documentation ([#28](https://github.com/KRoperUK/dimplex-controller-py/issues/28)) ([b998615](https://github.com/KRoperUK/dimplex-controller-py/commit/b998615766702ab53b9a53b99357f446e5444b31))
+
 ## [0.5.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.4.1...v0.5.0) (2026-07-09)
 
 
