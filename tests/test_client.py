@@ -257,3 +257,76 @@ async def test_get_tsi_energy_report_error(aresponses):
 
         with pytest.raises(DimplexApiError):
             await client.get_tsi_energy_report("hub-1")
+
+
+@pytest.mark.asyncio
+async def test_get_tsi_energy_report_payload(aresponses):
+    """The request payload includes HubId, StartDate, EndDate and report params."""
+    captured: dict = {}
+
+    async def handler(request):
+        captured["body"] = await request.json()
+        return aresponses.Response(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            body='{"HubId":"hub-1","ApplianceTelemetryData":{}}',
+        )
+
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/Reports/GetTsiEnergyReportDataForHub",
+        "POST",
+        handler,
+    )
+
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(session, refresh_token="fake_refresh")
+        client.auth._access_token = "fake_access"
+        client.auth._expires_at = 9999999999
+
+        await client.get_tsi_energy_report(
+            hub_id="hub-1",
+            report_type=1,
+            interval="00:10:00",
+            start_date="2026-01-01T00:00:00Z",
+            end_date="2026-07-12T23:59:59Z",
+            include_previous_period=True,
+        )
+
+    assert captured["body"]["HubId"] == "hub-1"
+    assert captured["body"]["TsiReportType"] == 1
+    assert captured["body"]["Interval"] == "00:10:00"
+    assert captured["body"]["StartDate"] == "2026-01-01T00:00:00Z"
+    assert captured["body"]["EndDate"] == "2026-07-12T23:59:59Z"
+    assert captured["body"]["IncludePreviousPeriod"] is True
+
+
+@pytest.mark.asyncio
+async def test_get_tsi_energy_report_omits_hub_id_when_none(aresponses):
+    """When no hub_id is supplied, the payload does not contain a HubId key."""
+    captured: dict = {}
+
+    async def handler(request):
+        captured["body"] = await request.json()
+        return aresponses.Response(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            body='{"HubId":"hub-9","ApplianceTelemetryData":{}}',
+        )
+
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/Reports/GetTsiEnergyReportDataForHub",
+        "POST",
+        handler,
+    )
+
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(session, refresh_token="fake_refresh")
+        client.auth._access_token = "fake_access"
+        client.auth._expires_at = 9999999999
+
+        await client.get_tsi_energy_report()
+
+    assert "HubId" not in captured["body"]
+    assert "EndDate" in captured["body"]
