@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import aiohttp
 
@@ -194,16 +195,15 @@ class DimplexControl:
         report_type: int = 1,
         interval: str = DEFAULT_TSI_INTERVAL,
         start_date: str | None = None,
+        end_date: str | None = None,
         include_previous_period: bool = False,
         days_back: int = DEFAULT_TSI_REPORT_DAYS,
     ) -> TsiEnergyReport:
         """Fetch the Time Series Insights energy report for a hub.
 
-        Returns a :class:`~dimplex_controller.models.TsiEnergyReport`. The
-        cloud response is the same regardless of ``hub_id`` (the field is
-        informational), so ``hub_id`` is only required to populate the
-        returned model. Each per-appliance list is left as the raw payload —
-        use :func:`dimplex_controller.telemetry.parse_telemetry_points` to
+        Returns a :class:`~dimplex_controller.models.TsiEnergyReport`. Each
+        per-appliance list is left as the raw payload — use
+        :func:`dimplex_controller.telemetry.parse_telemetry_points` to
         normalise the points into ``(timestamp, value)`` tuples.
 
         When the hub has no metered appliances (e.g. non-QRAD heaters, or a
@@ -212,13 +212,19 @@ class DimplexControl:
         """
         if start_date is None:
             start_date = _iso_utc_days_ago(days_back)
+        if end_date is None:
+            end_date = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
-        payload = {
+        payload: dict[str, Any] = {
             "TsiReportType": report_type,
             "Interval": interval,
             "StartDate": start_date,
+            "EndDate": end_date,
             "IncludePreviousPeriod": include_previous_period,
         }
+        if hub_id is not None:
+            payload["HubId"] = hub_id
+
         data = await self._request("POST", "/Reports/GetTsiEnergyReportDataForHub", json=payload)
         return TsiEnergyReport(
             HubId=(hub_id or data.get("HubId", "")),
