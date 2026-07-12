@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.1](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.6.0...v0.6.1) (2026-07-12)
+
+
+### Bug Fixes
+
+* handle ST energy telemetry and required report payload ([#31](https://github.com/KRoperUK/dimplex-controller-py/issues/31)) ([7a3714b](https://github.com/KRoperUK/dimplex-controller-py/commit/7a3714bcf5d601f11b858f004e21dd049159ff36))
+
 ## [0.6.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.5.0...v0.6.0) (2026-07-09)
 
 
