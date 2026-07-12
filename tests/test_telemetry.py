@@ -99,7 +99,8 @@ def test_bad_timestamp_yields_none(bad):
 
 
 def test_t1_and_ts_keys():
-    """Real Dimplex API points use ``T1`` for kWh and ``TS`` for Unix-epoch timestamps."""
+    """Real Dimplex API points use ``TS`` for Unix-epoch timestamps and
+    ``T1`` or ``ST`` for the kWh value."""
     out = parse_telemetry_points(
         [
             {"TS": 1767225600, "T1": 7.46},
@@ -111,6 +112,22 @@ def test_t1_and_ts_keys():
         (datetime(2026, 1, 1, tzinfo=timezone.utc), 7.46),
         (datetime(2026, 1, 2, tzinfo=timezone.utc), 8.02),
         (datetime(2026, 1, 3, tzinfo=timezone.utc), 7.91),
+    ]
+
+
+def test_st_and_ts_keys():
+    """QRAD050F / QRAD075F reports use ``ST`` as the energy value key."""
+    out = parse_telemetry_points(
+        [
+            {"TS": 1783773600, "ST": 0.06},
+            {"TS": 1783580400, "ST": 0.09},
+            {"TS": 1783000800, "ST": 0.08},
+        ]
+    )
+    assert out == [
+        (datetime(2026, 7, 11, 12, 40, 0, tzinfo=timezone.utc), 0.06),
+        (datetime(2026, 7, 9, 7, 0, 0, tzinfo=timezone.utc), 0.09),
+        (datetime(2026, 7, 2, 14, 0, 0, tzinfo=timezone.utc), 0.08),
     ]
 
 

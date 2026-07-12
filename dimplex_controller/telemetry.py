@@ -5,6 +5,9 @@ The response from ``POST /Reports/GetTsiEnergyReportDataForHub`` contains
 ``telemetry points`` per appliance. The shape of each point is not documented
 and varies between firmware versions, so we normalise whatever the cloud
 sends into ``(timestamp, value)`` tuples.
+
+Real-world payloads have been observed using ``TS`` (Unix-epoch timestamp)
+with either ``T1`` or ``ST`` as the energy value key.
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ _DEFAULT_TIMESTAMP_KEYS = (
 )
 _DEFAULT_VALUE_KEYS = (
     "t1",
+    "st",  # Observed on QRAD050F / QRAD075F energy reports (see dimplex-controller-hass #27).
     "value",
     "kwh",
     "energy",
