@@ -10,10 +10,14 @@ Real-world payloads have been observed using ``TS`` (Unix-epoch timestamp)
 with either ``T1`` or ``ST`` as the energy value key. Some appliances also
 report a secondary register ``T2`` on the same point.
 
-**T1 and T2 must stay separate.** They are believed to be tariff periods
-(e.g. peak / off-peak), not dual samples of the same meter. Never sum T1+T2
-into a single "total energy" figure, and never fall back from T1 parsing to
-T2 values (or vice versa).
+**T1 and T2 must stay separate.** They are dual-rate tariff registers, not
+dual samples of the same meter:
+
+* **T1** — off-peak (cheaper rate)
+* **T2** — peak (more expensive rate)
+
+Never sum T1+T2 into a single "total energy" figure, and never fall back from
+T1 parsing to T2 values (or vice versa).
 
 Important cloud semantics (live-verified):
 
@@ -51,8 +55,8 @@ _DEFAULT_TIMESTAMP_KEYS = (
     "start",
 )
 
-# Primary energy register (T1 / single-register appliances). Intentionally
-# excludes ``t2`` so peak/off-peak series are never mixed.
+# Primary / off-peak energy register (T1 / single-register appliances).
+# Intentionally excludes ``t2`` so off-peak and peak series are never mixed.
 VALUE_KEY_T1 = (
     "t1",
     "st",  # Observed on QRAD050F / QRAD075F energy reports (see dimplex-controller-hass #27).
@@ -65,7 +69,7 @@ VALUE_KEY_T1 = (
     "v",
 )
 
-# Secondary energy register (T2) observed for some Quantum appliances.
+# Secondary / peak energy register (T2) observed for some Quantum appliances.
 # Points may contain both ``T1`` and ``T2`` in the same payload — parse each
 # with its own key list; do not combine.
 VALUE_KEY_T2 = (

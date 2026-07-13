@@ -170,7 +170,7 @@ for appliance_id, telemetry in report.ApplianceTelemetryData.items():
     print(f"{appliance_id}: today={daily.total_kwh} kWh, lifetime={lifetime.total_kwh} kWh")
 ```
 
-`parse_telemetry_points` normalises firmware-varying point shapes. `summarise_energy` builds **daily** (local midnight) and **lifetime** totals **per register**. `T1` and `T2` (when present) are separate series — likely peak/off-peak — and must not be summed; parse with `VALUE_KEY_T1` / `VALUE_KEY_T2`. With `include_previous_period=True` the cloud often returns full history — filter client-side rather than trusting `days_back` alone.
+`parse_telemetry_points` normalises firmware-varying point shapes. `summarise_energy` builds **daily** (local midnight) and **lifetime** totals **per register**. `T1` (off-peak / cheaper) and `T2` (peak / more expensive) must not be summed; parse with `VALUE_KEY_T1` / `VALUE_KEY_T2`. With `include_previous_period=True` the cloud often returns full history — filter client-side rather than trusting `days_back` alone.
 
 ## Configuration
 

@@ -340,9 +340,10 @@ class DimplexControl:
         frequently returns the **full available daily history**, not only the
         ``days_back`` window. Filter client-side for daily/lifetime totals.
 
-        Points may include both ``T1`` and ``T2`` registers (likely peak /
-        off-peak). Parse them with :data:`~dimplex_controller.telemetry.VALUE_KEY_T1`
-        and :data:`~dimplex_controller.telemetry.VALUE_KEY_T2` separately —
+        Points may include both ``T1`` (off-peak / cheaper) and ``T2``
+        (peak / more expensive). Parse them with
+        :data:`~dimplex_controller.telemetry.VALUE_KEY_T1` and
+        :data:`~dimplex_controller.telemetry.VALUE_KEY_T2` separately —
         never sum T1+T2 into a single total.
 
         """
