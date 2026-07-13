@@ -76,7 +76,7 @@ class ProductModel(BaseModel):
             return None
         if isinstance(value, dict):
             return {str(k): v if isinstance(v, str) else json.dumps(v) for k, v in value.items()}
-        return value
+        return None  # unexpected type; Pydantic will reject
 
     @property
     def automatic_provisioning(self) -> AutomaticProvisioning | None:
@@ -85,7 +85,7 @@ class ProductModel(BaseModel):
         if not raw:
             return None
         try:
-            return AutomaticProvisioning.model_validate_json(raw)
+            return AutomaticProvisioning.model_validate_json(raw)  # type: ignore[no-any-return]
         except (json.JSONDecodeError, ValueError):
             return None
 
@@ -115,7 +115,7 @@ class Appliance(BaseModel):
             return None
         if isinstance(value, dict):
             return {str(k): v if isinstance(v, str) else json.dumps(v) for k, v in value.items()}
-        return value
+        return None  # unexpected type; Pydantic will reject
 
     @property
     def automatic_provisioning(self) -> AutomaticProvisioning | None:
@@ -124,7 +124,7 @@ class Appliance(BaseModel):
         if not raw:
             return None
         try:
-            return AutomaticProvisioning.model_validate_json(raw)
+            return AutomaticProvisioning.model_validate_json(raw)  # type: ignore[no-any-return]
         except (json.JSONDecodeError, ValueError):
             return None
 
