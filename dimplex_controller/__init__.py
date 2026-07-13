@@ -1,4 +1,15 @@
-"""Dimplex Controller Client."""
+"""Dimplex Controller Client.
+
+Async Python client for the Glen Dimplex Heating & Ventilation (GDHV) cloud
+API. See :class:`~dimplex_controller.client.DimplexControl` for the entry
+point and :meth:`DimplexControl.get_appliance_overview` for the read path
+used by the Home Assistant integration.
+
+A note on the API: ``get_appliance_overview`` may return an empty list
+with HTTP 200 when the requested appliances are offline. That is a
+successful poll, not an error — use ``get_appliance_overview_map`` if you
+need a stable id → status mapping.
+"""
 
 from .auth import TokenBundle
 from .capabilities import ApplianceCapabilities, capabilities_for
