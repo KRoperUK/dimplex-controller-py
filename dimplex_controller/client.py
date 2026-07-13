@@ -195,6 +195,16 @@ class DimplexControl:
         data = await self._request("POST", "/RemoteControl/GetTimerModeDetailsForAppliance", json=payload)
         return TimerModeSettings.model_validate(data)
 
+    async def get_schedule(self, hub_id: str, appliance_id: str) -> TimerModeSettings:
+        """Return the current timer mode + periods (alias of :meth:`get_appliance_features`)."""
+        return await self.get_appliance_features(hub_id, appliance_id)
+
+    async def _write_timer_settings(self, settings: TimerModeSettings) -> TimerModeSettings:
+        """POST a full :class:`TimerModeSettings` payload and return it."""
+        payload = {"TimerModeSettings": settings.model_dump(mode="json")}
+        await self._request("POST", "/RemoteControl/SetTimerMode", json=payload)
+        return settings
+
     async def set_mode(self, hub_id: str, appliance_id: str, mode: int | TimerMode) -> None:
         """Set the timer / operation mode.
 
@@ -202,9 +212,56 @@ class DimplexControl:
         """
         current = await self.get_appliance_features(hub_id, appliance_id)
         current.TimerMode = int(mode)
+        await self._write_timer_settings(current)
 
-        payload = {"TimerModeSettings": current.model_dump(mode="json")}
-        await self._request("POST", "/RemoteControl/SetTimerMode", json=payload)
+    async def set_period_setpoint(
+        self,
+        hub_id: str,
+        appliance_id: str,
+        *,
+        day_of_week: int,
+        start_time: str,
+        temperature: float,
+        end_time: str | None = None,
+    ) -> TimerModeSettings:
+        """Update one timer period's setpoint (and optional end) without clobbering others.
+
+        Matches periods by ``DayOfWeek`` + ``StartTime``. Raises ``ValueError`` if
+        no period matches. Prefer this over rewriting the whole schedule.
+        """
+        current = await self.get_appliance_features(hub_id, appliance_id)
+        matched = False
+        for period in current.TimerPeriods:
+            if period.DayOfWeek == day_of_week and period.StartTime == start_time:
+                period.Temperature = float(temperature)
+                if end_time is not None:
+                    period.EndTime = end_time
+                matched = True
+                break
+        if not matched:
+            raise ValueError(f"No timer period for day={day_of_week} start={start_time!r} on appliance {appliance_id}")
+        return await self._write_timer_settings(current)
+
+    async def update_period(
+        self,
+        hub_id: str,
+        appliance_id: str,
+        period: TimerPeriod,
+        *,
+        match_start_time: str | None = None,
+    ) -> TimerModeSettings:
+        """Replace a single period matched by day + start time (read-modify-write).
+
+        ``match_start_time`` defaults to ``period.StartTime`` so callers can also
+        change the period's start by passing the previous start string.
+        """
+        key_start = match_start_time if match_start_time is not None else period.StartTime
+        current = await self.get_appliance_features(hub_id, appliance_id)
+        for index, existing in enumerate(current.TimerPeriods):
+            if existing.DayOfWeek == period.DayOfWeek and existing.StartTime == key_start:
+                current.TimerPeriods[index] = period
+                return await self._write_timer_settings(current)
+        raise ValueError(f"No timer period for day={period.DayOfWeek} start={key_start!r} on appliance {appliance_id}")
 
     async def set_target_temperature(self, hub_id: str, appliance_id: str, temp: float) -> None:
         """Set the target / comfort temperature for an appliance.
@@ -219,6 +276,10 @@ class DimplexControl:
 
         This matches the reverse-engineered mobile-app approach of rewriting
         the active schedule rather than a dedicated "set temperature" RPC.
+
+        **Note:** unlike :meth:`set_period_setpoint`, this updates *all* period
+        temperatures (or installs a full-week schedule). Use the period helpers
+        when only one window should change.
         """
         current = await self.get_appliance_features(hub_id, appliance_id)
 
@@ -237,8 +298,7 @@ class DimplexControl:
                 for day in range(7)
             ]
 
-        payload = {"TimerModeSettings": current.model_dump(mode="json")}
-        await self._request("POST", "/RemoteControl/SetTimerMode", json=payload)
+        await self._write_timer_settings(current)
 
     async def set_appliance_mode(
         self, hub_id: str, appliance_ids: list[str], mode_settings: ApplianceModeSettings

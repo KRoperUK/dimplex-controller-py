@@ -464,3 +464,97 @@ async def test_get_product_models(aresponses):
     assert models[0].ProductModelName == "QM100RF"
     assert models[0].automatic_provisioning is not None
     assert models[0].automatic_provisioning.rated_power == 2.22
+
+
+@pytest.mark.asyncio
+async def test_set_period_setpoint_only_touches_matched_period(aresponses):
+    """set_period_setpoint updates one period and preserves siblings."""
+    get_body = {
+        "HubId": "hub-1",
+        "ApplianceId": "a-1",
+        "TimerMode": 0,
+        "TimerPeriods": [
+            {"DayOfWeek": 1, "StartTime": "06:00:00", "EndTime": "09:00:00", "Temperature": 18.0},
+            {"DayOfWeek": 1, "StartTime": "17:00:00", "EndTime": "22:00:00", "Temperature": 20.0},
+            {"DayOfWeek": 2, "StartTime": "06:00:00", "EndTime": "09:00:00", "Temperature": 18.0},
+        ],
+    }
+    import json
+
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/RemoteControl/GetTimerModeDetailsForAppliance",
+        "POST",
+        aresponses.Response(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            body=json.dumps(get_body),
+        ),
+    )
+    captured: dict = {}
+
+    async def set_handler(request):
+        captured["body"] = await request.json()
+        return aresponses.Response(status=200, headers={"Content-Type": "application/json"}, body="{}")
+
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/RemoteControl/SetTimerMode",
+        "POST",
+        set_handler,
+    )
+
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(session, refresh_token="fake_refresh")
+        client.auth._access_token = "fake_access"
+        client.auth._expires_at = 9999999999
+        result = await client.set_period_setpoint(
+            "hub-1",
+            "a-1",
+            day_of_week=1,
+            start_time="17:00:00",
+            temperature=21.5,
+        )
+
+    periods = captured["body"]["TimerModeSettings"]["TimerPeriods"]
+    assert len(periods) == 3
+    assert periods[0]["Temperature"] == 18.0
+    assert periods[1]["Temperature"] == 21.5
+    assert periods[2]["Temperature"] == 18.0
+    assert result.TimerPeriods[1].Temperature == 21.5
+
+
+@pytest.mark.asyncio
+async def test_set_period_setpoint_missing_raises(aresponses):
+    import json
+
+    get_body = {
+        "HubId": "hub-1",
+        "ApplianceId": "a-1",
+        "TimerMode": 1,
+        "TimerPeriods": [
+            {"DayOfWeek": 0, "StartTime": "00:00:00", "EndTime": "23:59:59", "Temperature": 19.0},
+        ],
+    }
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/RemoteControl/GetTimerModeDetailsForAppliance",
+        "POST",
+        aresponses.Response(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            body=json.dumps(get_body),
+        ),
+    )
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(session, refresh_token="fake_refresh")
+        client.auth._access_token = "fake_access"
+        client.auth._expires_at = 9999999999
+        with pytest.raises(ValueError, match="No timer period"):
+            await client.set_period_setpoint(
+                "hub-1",
+                "a-1",
+                day_of_week=3,
+                start_time="08:00:00",
+                temperature=20.0,
+            )
