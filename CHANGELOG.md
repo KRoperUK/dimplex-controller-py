@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.11.0...v0.12.0) (2026-07-13)
+
+
+### Features
+
+* expose on_token_update callback through DimplexControl constructor ([#80](https://github.com/KRoperUK/dimplex-controller-py/issues/80)) ([2402554](https://github.com/KRoperUK/dimplex-controller-py/commit/2402554b26c69fc2c6fba17d62185220931caa12)), closes [#70](https://github.com/KRoperUK/dimplex-controller-py/issues/70)
+
+
+### Bug Fixes
+
+* correct CI badge workflow filename and use shields.io ([#78](https://github.com/KRoperUK/dimplex-controller-py/issues/78)) ([5a21930](https://github.com/KRoperUK/dimplex-controller-py/commit/5a21930b519e9e7de114bf2c0c675850c8b9eb7d))
+
 ## [0.11.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.10.1...v0.11.0) (2026-07-13)
 
 

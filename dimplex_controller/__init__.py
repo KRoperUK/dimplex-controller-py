@@ -11,7 +11,7 @@ successful poll, not an error — use ``get_appliance_overview_map`` if you
 need a stable id → status mapping.
 """
 
-from .auth import TokenBundle
+from .auth import TokenBundle, TokenListener
 from .capabilities import ApplianceCapabilities, capabilities_for
 from .client import DimplexControl
 from .exceptions import (
@@ -50,6 +50,7 @@ from .telemetry import (
 __all__ = [
     "DimplexControl",
     "TokenBundle",
+    "TokenListener",
     "ApplianceCapabilities",
     "capabilities_for",
     "Hub",

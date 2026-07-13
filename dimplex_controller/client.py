@@ -9,7 +9,7 @@ from typing import Any
 
 import aiohttp
 
-from .auth import AuthManager, TokenBundle
+from .auth import AuthManager, TokenBundle, TokenListener
 from .capabilities import ApplianceCapabilities, capabilities_for
 from .const import (
     BASE_URL,
@@ -97,6 +97,7 @@ class DimplexControl:
         retry_max_delay: float = DEFAULT_RETRY_MAX_DELAY,
         retry_non_idempotent: bool = False,
         timeout: float | aiohttp.ClientTimeout | None = DEFAULT_TIMEOUT,
+        on_token_update: TokenListener | None = None,
     ):
         """Initialize the client.
 
@@ -119,6 +120,11 @@ class DimplexControl:
         for fine-grained control, or ``None`` to fall back to aiohttp defaults.
         A timed-out request is surfaced as :class:`DimplexConnectionError` and,
         for retryable methods, retried like any other connection error.
+
+        ``on_token_update`` is an optional callback (sync or async) invoked with
+        a :class:`TokenBundle` whenever tokens are refreshed or exchanged. Use
+        it to persist tokens reactively (e.g. write to a config-entry store)
+        rather than polling :meth:`export_tokens` after every request.
         """
         if token_bundle is not None:
             token_data: dict[str, Any] | TokenBundle = token_bundle
@@ -133,7 +139,7 @@ class DimplexControl:
 
         self._session = session
         self._timeout = _coerce_timeout(timeout)
-        self.auth = AuthManager(session, token_data, timeout=self._timeout)
+        self.auth = AuthManager(session, token_data, timeout=self._timeout, on_token_update=on_token_update)
         self._max_retries = max(0, int(max_retries))
         self._retry_base_delay = float(retry_base_delay)
         self._retry_max_delay = float(retry_max_delay)
