@@ -34,26 +34,52 @@ This installs the library plus `pytest`, `ruff`, `pre-commit`, `mypy` and `twine
 
 ## First run
 
-Because Azure AD B2C does not support fully headless password login without a browser, you must complete a one-time interactive authentication.
+The library supports two authentication methods:
 
-Run the demo script:
+### Headless login (recommended)
+
+No browser needed. From a script or the CLI:
+
+```python
+import asyncio
+from aiohttp import ClientSession
+from dimplex_controller import DimplexControl
+
+async def main():
+    async with ClientSession() as session:
+        client = DimplexControl(session)
+        await client.auth.headless_login("your@email.com", "your_password")
+        # Persist tokens for next time:
+        tokens = client.export_tokens()
+        print(tokens.as_dict())
+
+asyncio.run(main())
+```
+
+Or via the CLI:
+
+```bash
+pip install dimplex-controller
+export DIMPLEX_REFRESH_TOKEN=...  # from a previous run
+dimplex login
+dimplex hubs
+```
+
+### Manual browser flow (fallback)
+
+If headless login fails (e.g. CAPTCHA or MFA changes), fall back to the browser flow:
 
 ```bash
 python demo.py
 ```
 
-You will see:
+1. A URL is printed — open it in your browser.
+2. Log in with your Dimplex credentials.
+3. You are redirected to `msal...://auth/` which fails to load (expected).
+4. Copy the full redirect URL and paste it back.
+5. Tokens are saved to `dimplex_tokens.json`.
 
-1. A URL printed to the terminal.
-2. Open that URL in your browser.
-3. Log in with your Dimplex credentials.
-4. After signing in, you will be redirected to a `msal...://auth/` page that fails to load (this is expected).
-5. Copy the full redirect URL from the browser address bar (it contains `?code=...`).
-6. Paste it back into the terminal.
-
-The script exchanges the code for tokens and writes them to `dimplex_tokens.json` in the current working directory.
-
-> **Tip:** Add `dimplex_tokens.json` to your `.gitignore` so you do not accidentally commit tokens.
+> **Tip:** Add `dimplex_tokens.json` to `.gitignore`.
 
 ## Writing your first script
 

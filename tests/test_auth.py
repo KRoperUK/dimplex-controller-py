@@ -603,3 +603,44 @@ async def test_exchange_code_logs_do_not_include_full_code(aresponses, caplog):
                 await auth.exchange_code("super-secret-auth-code-value")
     joined = " ".join(r.getMessage() for r in caplog.records)
     assert "super-secret-auth-code-value" not in joined
+
+
+# ---------------------------------------------------------------------------
+# timeout wiring
+# ---------------------------------------------------------------------------
+
+
+def test_auth_manager_coerces_numeric_timeout():
+    """A numeric timeout is stored as an aiohttp.ClientTimeout on the manager."""
+    mgr = AuthManager(MagicMock(), timeout=15.0)
+    assert isinstance(mgr._timeout, aiohttp.ClientTimeout)
+    assert mgr._timeout.total == 15.0
+    assert mgr._request_kwargs() == {"timeout": mgr._timeout}
+
+
+def test_auth_manager_timeout_none_omits_kwarg():
+    """timeout=None means no per-request timeout override is passed."""
+    mgr = AuthManager(MagicMock(), timeout=None)
+    assert mgr._timeout is None
+    assert mgr._request_kwargs() == {}
+
+
+@pytest.mark.asyncio
+async def test_refresh_timeout_becomes_transient_error(monkeypatch):
+    """A transport timeout during refresh is surfaced as a transient auth error."""
+
+    class _TimeoutCtx:
+        async def __aenter__(self):
+            raise asyncio.TimeoutError
+
+        async def __aexit__(self, *exc):
+            return False
+
+    class _Session:
+        def post(self, *args, **kwargs):
+            assert "timeout" in kwargs  # timeout is forwarded
+            return _TimeoutCtx()
+
+    mgr = AuthManager(_Session(), {"refresh_token": "r"}, timeout=5.0)
+    with pytest.raises(DimplexAuthTransientError):
+        await mgr.refresh_tokens()

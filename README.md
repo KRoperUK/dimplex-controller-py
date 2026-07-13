@@ -99,17 +99,22 @@ if __name__ == "__main__":
 
 ### Authentication
 
-Dimplex uses Azure AD B2C. You cannot log in purely programmatically with just a username and password — the library must first capture a short-lived authorisation code.
+Dimplex uses Azure AD B2C. The library supports two methods:
 
-The recommended approach is to run the included demo script once:
+#### Email / password (headless login) — recommended
 
-```bash
-python demo.py
+```python
+client = DimplexControl(session)
+await client.auth.headless_login("you@example.com", "password")
 ```
 
-The script walks you through opening a browser, signing in, and pasting the resulting redirect URL back into the terminal. On success, it saves a `dimplex_tokens.json` file in the current working directory.
+This automates the full B2C flow via HTTP. On success, `client.is_authenticated` is `True` and tokens can be persisted with `client.export_tokens()`.
 
-Subsequent runs read the refresh token from that file automatically. You can also pass the refresh token directly to `DimplexControl` if you prefer to manage storage yourself.
+#### Manual auth code (browser)
+
+Run `demo.py` to open a browser, sign in, and paste the redirect URL. The script saves tokens to `dimplex_tokens.json`. Subsequent runs load the refresh token automatically.
+
+Either way, refresh tokens are used on future calls — the library handles token renewal transparently.
 
 ### Discovery
 
@@ -188,22 +193,31 @@ See [docs/compatibility.md](docs/compatibility.md) for the library ↔ Home Assi
 
 ### `DimplexControl`
 
-Main client class. Construct with an `aiohttp.ClientSession` and a `refresh_token`.
+Main client class. Construct with an `aiohttp.ClientSession` and a `refresh_token` (or `token_bundle`).
 
 | Method | Description |
 |--------|-------------|
 | `get_hubs()` | Returns `list[Hub]`. |
 | `get_hub_zones(hub_id)` | Returns `list[Zone]` for a Hub. |
 | `get_zone(hub_id, zone_id)` | Returns a single `Zone`. |
-| `get_appliance_overview(hub_id, appliance_ids)` | Returns `list[ApplianceStatus]`. |
+| `get_appliance_overview(hub_id, appliance_ids)` | Returns `list[ApplianceStatus]` (may be `[]`). |
+| `get_appliance_overview_map(hub_id, appliance_ids)` | Stable `dict[str, ApplianceStatus \| None]`. |
 | `get_user_context()` | Returns `UserContext`. |
-| `get_appliance_features(hub_id, appliance_ids)` | Returns raw appliance feature data. |
-| `set_mode(hub_id, appliance_ids, mode, temperature)` | Set operation mode. |
-| `set_target_temperature(...)` | Placeholder for future target temperature control. |
-| `set_appliance_mode(hub_id, appliance_ids, settings)` | Send full mode settings. |
-| `set_eco_start(hub_id, appliance_ids, enabled)` | Toggle EcoStart. |
-| `set_open_window_detection(hub_id, appliance_ids, enabled)` | Toggle Open Window Detection. |
-| `get_tsi_energy_report(hub_id)` | Returns `TsiEnergyReport`. |
+| `get_product_models()` | Returns `list[ProductModel]` (cacheable). |
+| `get_schedule(hub_id, appliance_id)` | Returns `TimerModeSettings` (timer + periods). |
+| `set_mode(hub_id, appliance_id, mode)` | Change timer/operation mode. |
+| `set_target_temperature(hub_id, appliance_id, temp)` | Rewrite all period setpoints or install full-week schedule. |
+| `set_period_setpoint(...)` | Update one timer period without clobbering siblings. |
+| `update_period(...)` | Replace a timer period matched by day + start time. |
+| `set_boost(hub_id, appliance_ids, *, temperature, duration_minutes, enable)` | Enable/disable Boost. |
+| `clear_boost(hub_id, appliance_ids)` | Disable Boost. |
+| `set_away(hub_id, appliance_ids, *, temperature, enable, number_of_days)` | Enable/disable Away. |
+| `clear_away(hub_id, appliance_ids)` | Disable Away. |
+| `set_eco_start(hub_id, appliance_ids, enable)` | Toggle EcoStart. |
+| `set_open_window_detection(hub_id, appliance_ids, enable)` | Toggle Open Window Detection. |
+| `get_tsi_energy_report(hub_id, ...)` | Returns `TsiEnergyReport`. |
+| `capabilities_for(appliance, *, status, product)` | Derive an `ApplianceCapabilities` matrix. |
+| `export_tokens()` / `apply_tokens(bundle)` | Token persistence helpers. |
 
 ### Models
 
@@ -253,7 +267,24 @@ If `parse_telemetry_points` returns an empty list, the API likely returned an un
 
 ### Rate limiting
 
-The GDHV cloud API has rate limits. If you hit them, back off for a few minutes before retrying. The library does not currently implement automatic retries with back-off.
+The GDHV cloud API has rate limits. The library retries idempotent `GET`
+requests automatically on HTTP 429/5xx and connection errors, using exponential
+backoff with jitter and honouring the `Retry-After` header when present.
+Non-idempotent control calls (`POST`/`PUT`/`PATCH`/`DELETE`) are **not** retried
+by default. Tune this via the client constructor:
+
+```python
+client = DimplexControl(
+    session,
+    refresh_token="...",
+    max_retries=3,             # retries after the first attempt (0 disables)
+    retry_base_delay=0.5,      # seconds; exponential base
+    retry_max_delay=8.0,       # seconds; backoff ceiling
+    retry_non_idempotent=False,  # set True to also retry POST/PUT/etc.
+)
+```
+
+If you still hit persistent limits, back off for a few minutes before retrying.
 
 ### `get_appliance_overview` returns an empty list
 

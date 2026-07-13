@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 import logging
@@ -39,6 +40,15 @@ TokenListener = Callable[["TokenBundle"], Awaitable[None] | None]
 _MAX_REDIRECT_HOPS = 20
 
 
+def _coerce_auth_timeout(timeout: aiohttp.ClientTimeout | float | None) -> aiohttp.ClientTimeout | None:
+    """Normalise an auth timeout into an :class:`aiohttp.ClientTimeout`."""
+    if timeout is None:
+        return None
+    if isinstance(timeout, aiohttp.ClientTimeout):
+        return timeout
+    return aiohttp.ClientTimeout(total=float(timeout))
+
+
 @dataclass(frozen=True, slots=True)
 class TokenBundle:
     """Public, serialisable snapshot of auth tokens."""
@@ -76,14 +86,27 @@ class AuthManager:
         token_data: dict[str, Any] | TokenBundle | None = None,
         *,
         on_token_update: TokenListener | None = None,
+        timeout: aiohttp.ClientTimeout | float | None = None,
     ):
-        """Initialize the auth manager."""
+        """Initialize the auth manager.
+
+        ``timeout`` bounds every auth request (token refresh, code exchange, and
+        the headless B2C login). Pass a number for a total timeout in seconds,
+        an :class:`aiohttp.ClientTimeout`, or ``None`` for aiohttp defaults.
+        """
         self._session = session
         self._on_token_update = on_token_update
+        self._timeout = _coerce_auth_timeout(timeout)
         bundle = token_data if isinstance(token_data, TokenBundle) else TokenBundle.from_mapping(token_data)
         self._access_token: str | None = bundle.access_token
         self._refresh_token: str | None = bundle.refresh_token
         self._expires_at: float = bundle.expires_at
+
+    def _request_kwargs(self) -> dict[str, Any]:
+        """Common per-request kwargs (applies the configured timeout)."""
+        if self._timeout is not None:
+            return {"timeout": self._timeout}
+        return {}
 
     @property
     def is_authenticated(self) -> bool:
@@ -139,7 +162,7 @@ class AuthManager:
         }
 
         try:
-            async with self._session.post(f"{AUTH_URL}/token", data=payload) as resp:
+            async with self._session.post(f"{AUTH_URL}/token", data=payload, **self._request_kwargs()) as resp:
                 if resp.status != HTTP_OK:
                     text = await resp.text()
                     _LOGGER.error(
@@ -153,7 +176,7 @@ class AuthManager:
                 await self._update_tokens(data)
         except DimplexAuthError:
             raise
-        except aiohttp.ClientError as exc:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
             raise DimplexAuthTransientError(
                 f"Network error while refreshing token: {type(exc).__name__}",
                 details=str(exc)[:200],
@@ -217,7 +240,7 @@ class AuthManager:
 
         _LOGGER.debug("Exchanging authorization code for tokens")
         try:
-            async with self._session.post(f"{AUTH_URL}/token", data=payload) as resp:
+            async with self._session.post(f"{AUTH_URL}/token", data=payload, **self._request_kwargs()) as resp:
                 if resp.status != HTTP_OK:
                     text = await resp.text()
                     _LOGGER.error(
@@ -231,7 +254,7 @@ class AuthManager:
                 await self._update_tokens(data)
         except DimplexAuthError:
             raise
-        except aiohttp.ClientError as exc:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
             raise DimplexAuthTransientError(
                 f"Network error while exchanging code: {type(exc).__name__}",
                 details=str(exc)[:200],
@@ -291,7 +314,7 @@ class AuthManager:
         start_url = self.get_login_url()
 
         try:
-            async with aiohttp.ClientSession(cookie_jar=jar) as session:
+            async with aiohttp.ClientSession(cookie_jar=jar, timeout=self._timeout) as session:
                 # Step 1: GET the auth URI, follow redirects to B2C login page
                 _LOGGER.debug("Fetching B2C login page")
                 try:
