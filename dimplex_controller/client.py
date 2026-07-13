@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import random
 from datetime import datetime, timedelta, timezone
@@ -55,6 +56,24 @@ DEFAULT_RETRY_BASE_DELAY = 0.5
 DEFAULT_RETRY_MAX_DELAY = 8.0
 _RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
 
+# Default total request timeout in seconds. Without this aiohttp falls back to a
+# 5-minute default, which can hang a caller (e.g. a Home Assistant coordinator
+# poll) on a stalled connection. Callers may override per-client.
+DEFAULT_TIMEOUT = 30.0
+
+
+def _coerce_timeout(timeout: float | aiohttp.ClientTimeout | None) -> aiohttp.ClientTimeout | None:
+    """Normalise a timeout value into an :class:`aiohttp.ClientTimeout`.
+
+    ``None`` disables the client-level timeout (aiohttp defaults apply); a
+    number is treated as the total request timeout in seconds.
+    """
+    if timeout is None:
+        return None
+    if isinstance(timeout, aiohttp.ClientTimeout):
+        return timeout
+    return aiohttp.ClientTimeout(total=float(timeout))
+
 
 def _iso_utc_days_ago(days: int) -> str:
     """Return an ISO-8601 UTC timestamp ``days`` before now (no microseconds)."""
@@ -77,6 +96,7 @@ class DimplexControl:
         retry_base_delay: float = DEFAULT_RETRY_BASE_DELAY,
         retry_max_delay: float = DEFAULT_RETRY_MAX_DELAY,
         retry_non_idempotent: bool = False,
+        timeout: float | aiohttp.ClientTimeout | None = DEFAULT_TIMEOUT,
     ):
         """Initialize the client.
 
@@ -93,6 +113,12 @@ class DimplexControl:
           policy (use with care).
         * ``max_retries`` is the number of *retries* after the first attempt
           (0 disables retries).
+
+        ``timeout`` bounds every request (API and auth). Pass a number for a
+        total timeout in seconds (default 30s), an :class:`aiohttp.ClientTimeout`
+        for fine-grained control, or ``None`` to fall back to aiohttp defaults.
+        A timed-out request is surfaced as :class:`DimplexConnectionError` and,
+        for retryable methods, retried like any other connection error.
         """
         if token_bundle is not None:
             token_data: dict[str, Any] | TokenBundle = token_bundle
@@ -106,7 +132,8 @@ class DimplexControl:
                 token_data["expires_at"] = expires_at
 
         self._session = session
-        self.auth = AuthManager(session, token_data)
+        self._timeout = _coerce_timeout(timeout)
+        self.auth = AuthManager(session, token_data, timeout=self._timeout)
         self._max_retries = max(0, int(max_retries))
         self._retry_base_delay = float(retry_base_delay)
         self._retry_max_delay = float(retry_max_delay)
@@ -170,6 +197,8 @@ class DimplexControl:
         )
 
         url = f"{BASE_URL}{endpoint}"
+        if self._timeout is not None and "timeout" not in kwargs:
+            kwargs["timeout"] = self._timeout
         allow_retry = self._should_retry(method)
         attempts = self._max_retries + 1 if allow_retry else 1
         last_error: Exception | None = None
@@ -178,9 +207,7 @@ class DimplexControl:
             try:
                 async with self._session.request(method, url, headers=headers, **kwargs) as resp:
                     if resp.status == HTTP_OK:
-                        if resp.content_length == 0:
-                            return {}
-                        return await resp.json()
+                        return await self._decode_ok_body(resp)
 
                     text = await resp.text()
                     retry_after = self._parse_retry_after(resp.headers.get("Retry-After"))
@@ -192,7 +219,7 @@ class DimplexControl:
                             endpoint,
                             resp.status,
                             attempt + 1,
-                            self._max_retries,
+                            attempts - 1,
                             delay,
                         )
                         last_error = DimplexApiError(resp.status, text)
@@ -201,7 +228,7 @@ class DimplexControl:
 
                     _LOGGER.error("API request failed: %s - %s", resp.status, text)
                     raise DimplexApiError(resp.status, text)
-            except aiohttp.ClientError as e:
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                 if allow_retry and attempt + 1 < attempts:
                     delay = self._backoff_seconds(attempt)
                     _LOGGER.warning(
@@ -209,7 +236,7 @@ class DimplexControl:
                         method,
                         endpoint,
                         attempt + 1,
-                        self._max_retries,
+                        attempts - 1,
                         delay,
                         e,
                     )
@@ -224,6 +251,25 @@ class DimplexControl:
         if isinstance(last_error, DimplexConnectionError):
             raise last_error
         raise DimplexConnectionError("Request failed after retries")
+
+    @staticmethod
+    async def _decode_ok_body(resp: aiohttp.ClientResponse) -> Any:
+        """Decode a 2xx JSON body, tolerating empty responses.
+
+        Some Dimplex control endpoints reply ``200 OK`` with an empty body (no
+        ``Content-Length`` when chunked/compressed), so ``resp.content_length``
+        alone is unreliable. Read the raw text and treat empty/whitespace as an
+        empty object. A non-empty body that fails to parse is wrapped as a
+        :class:`DimplexConnectionError` rather than escaping as a raw
+        ``JSONDecodeError``.
+        """
+        text = await resp.text()
+        if not text or not text.strip():
+            return {}
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise DimplexConnectionError(f"Invalid JSON in response: {exc}") from exc
 
     @staticmethod
     def capabilities_for(

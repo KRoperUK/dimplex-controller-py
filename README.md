@@ -267,7 +267,24 @@ If `parse_telemetry_points` returns an empty list, the API likely returned an un
 
 ### Rate limiting
 
-The GDHV cloud API has rate limits. If you hit them, back off for a few minutes before retrying. The library does not currently implement automatic retries with back-off.
+The GDHV cloud API has rate limits. The library retries idempotent `GET`
+requests automatically on HTTP 429/5xx and connection errors, using exponential
+backoff with jitter and honouring the `Retry-After` header when present.
+Non-idempotent control calls (`POST`/`PUT`/`PATCH`/`DELETE`) are **not** retried
+by default. Tune this via the client constructor:
+
+```python
+client = DimplexControl(
+    session,
+    refresh_token="...",
+    max_retries=3,             # retries after the first attempt (0 disables)
+    retry_base_delay=0.5,      # seconds; exponential base
+    retry_max_delay=8.0,       # seconds; backoff ceiling
+    retry_non_idempotent=False,  # set True to also retry POST/PUT/etc.
+)
+```
+
+If you still hit persistent limits, back off for a few minutes before retrying.
 
 ### `get_appliance_overview` returns an empty list
 
