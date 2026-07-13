@@ -439,3 +439,28 @@ async def test_export_tokens():
         assert bundle.refresh_token == "r"
         assert bundle.expires_at == 123.0
         assert bundle.as_dict()["refresh_token"] == "r"
+
+
+@pytest.mark.asyncio
+async def test_get_product_models(aresponses):
+    """Product catalogue is parsed into ProductModel rows."""
+    body = (
+        '[{"ProductModelId":"id-1","ProductModelName":"QM100RF","ProductTypeName":"Quantum",'
+        '"ProductModelExtensions":{"AUTOMATIC_PROVISIONING":'
+        '"{\\"ratedPower\\":2.22,\\"chargeCapacity\\":15.5}"}}]'
+    )
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/Appliances/GetProductModels",
+        "GET",
+        aresponses.Response(status=200, headers={"Content-Type": "application/json"}, body=body),
+    )
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(session, refresh_token="fake_refresh")
+        client.auth._access_token = "fake_access"
+        client.auth._expires_at = 9999999999
+        models = await client.get_product_models()
+    assert len(models) == 1
+    assert models[0].ProductModelName == "QM100RF"
+    assert models[0].automatic_provisioning is not None
+    assert models[0].automatic_provisioning.rated_power == 2.22
