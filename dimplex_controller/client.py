@@ -19,7 +19,9 @@ from .const import (
     HTTP_OK,
 )
 from .exceptions import DimplexApiError, DimplexConnectionError
+from .capabilities import ApplianceCapabilities, capabilities_for
 from .models import (
+    Appliance,
     ApplianceModeFlag,
     ApplianceModeSettings,
     ApplianceStatus,
@@ -132,6 +134,16 @@ class DimplexControl:
         except aiohttp.ClientError as e:
             _LOGGER.error("Connection error during API request: %s", e)
             raise DimplexConnectionError(f"Connection error: {e}") from e
+
+    @staticmethod
+    def capabilities_for(
+        appliance: Appliance | None = None,
+        *,
+        status: ApplianceStatus | None = None,
+        product: ProductModel | None = None,
+    ) -> ApplianceCapabilities:
+        """Return a capability matrix for an appliance (see :mod:`.capabilities`)."""
+        return capabilities_for(appliance, status=status, product=product)
 
     async def get_hubs(self) -> list[Hub]:
         """Get all hubs for the user."""

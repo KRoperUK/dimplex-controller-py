@@ -1,6 +1,7 @@
 """Dimplex Controller Client."""
 
 from .auth import TokenBundle
+from .capabilities import ApplianceCapabilities, capabilities_for
 from .client import DimplexControl
 from .exceptions import (
     DimplexApiError,
@@ -37,6 +38,8 @@ from .telemetry import (
 __all__ = [
     "DimplexControl",
     "TokenBundle",
+    "ApplianceCapabilities",
+    "capabilities_for",
     "Hub",
     "Zone",
     "Appliance",
