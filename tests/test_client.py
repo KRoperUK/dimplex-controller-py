@@ -691,3 +691,91 @@ async def test_set_period_setpoint_missing_raises(aresponses):
                 start_time="08:00:00",
                 temperature=20.0,
             )
+
+
+# ---------------------------------------------------------------------------
+# on_token_update callback
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_on_token_update_fires_on_refresh(aresponses):
+    """The on_token_update callback fires with a TokenBundle after a token refresh."""
+    from dimplex_controller.auth import TokenBundle
+
+    captured: list = []
+
+    async def _on_update(bundle: TokenBundle):
+        captured.append(bundle)
+
+    # mock the /token endpoint (refresh)
+    aresponses.add(
+        "gdhvb2c.b2clogin.com",
+        response=aresponses.Response(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            body='{"access_token":"new_at","refresh_token":"new_rt","expires_in":3600}',
+        ),
+    )
+    # mock the actual API call
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/Hubs/GetUserHubs",
+        "GET",
+        aresponses.Response(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            body="[]",
+        ),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(session, refresh_token="old_rt", on_token_update=_on_update)
+        # Force token to be expired so refresh triggers
+        client.auth._expires_at = 0
+
+        await client.get_hubs()
+
+    assert len(captured) == 1
+    assert isinstance(captured[0], TokenBundle)
+    assert captured[0].access_token == "new_at"
+    assert captured[0].refresh_token == "new_rt"
+
+
+@pytest.mark.asyncio
+async def test_on_token_update_sync_callback(aresponses):
+    """A synchronous on_token_update callback also works."""
+    from dimplex_controller.auth import TokenBundle
+
+    captured: list = []
+
+    def _on_update(bundle: TokenBundle):
+        captured.append(bundle)
+
+    aresponses.add(
+        "gdhvb2c.b2clogin.com",
+        response=aresponses.Response(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            body='{"access_token":"at2","refresh_token":"rt2","expires_in":3600}',
+        ),
+    )
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/Hubs/GetUserHubs",
+        "GET",
+        aresponses.Response(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            body="[]",
+        ),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(session, refresh_token="old_rt", on_token_update=_on_update)
+        client.auth._expires_at = 0
+
+        await client.get_hubs()
+
+    assert len(captured) == 1
+    assert captured[0].refresh_token == "rt2"
