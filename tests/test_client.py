@@ -154,7 +154,7 @@ async def test_api_error(aresponses):
     )
 
     async with aiohttp.ClientSession() as session:
-        client = DimplexControl(session, refresh_token="fake_refresh")
+        client = DimplexControl(session, refresh_token="fake_refresh", max_retries=0)
         client.auth._access_token = "fake_access"
         client.auth._expires_at = 9999999999
 
