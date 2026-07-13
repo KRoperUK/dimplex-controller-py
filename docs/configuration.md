@@ -82,15 +82,34 @@ async with ClientSession(connector=aiohttp.TCPConnector(verify_ssl=False)) as se
 
 ## Timeout configuration
 
-`aiohttp` default timeouts apply unless overridden. To increase the total timeout:
+Every request (API and auth) is bounded by a **30-second total timeout** by
+default, so a stalled connection can't hang a caller (for example a Home
+Assistant coordinator poll). A timed-out request is raised as
+`DimplexConnectionError` and, for idempotent `GET`s, retried like any other
+connection error.
+
+Override it per client with a number of seconds, a full `aiohttp.ClientTimeout`,
+or `None` to fall back to aiohttp's own defaults:
 
 ```python
-from aiohttp import ClientTimeout, ClientSession
+from aiohttp import ClientTimeout
 
-timeout = ClientTimeout(total=30)
-async with ClientSession(timeout=timeout) as session:
-    client = DimplexControl(session, refresh_token="...")
+# Simple total timeout in seconds
+client = DimplexControl(session, refresh_token="...", timeout=15)
+
+# Fine-grained control
+client = DimplexControl(
+    session,
+    refresh_token="...",
+    timeout=ClientTimeout(total=30, connect=5),
+)
+
+# Disable the library timeout (aiohttp defaults apply)
+client = DimplexControl(session, refresh_token="...", timeout=None)
 ```
+
+The client-level `timeout` takes precedence over a timeout set on the shared
+`ClientSession` for requests the library makes.
 
 ## API base URL
 
