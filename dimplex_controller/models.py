@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, time
 from enum import IntEnum, IntFlag
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -70,7 +71,7 @@ class ProductModel(BaseModel):
 
     @field_validator("ProductModelExtensions", mode="before")
     @classmethod
-    def _coerce_extensions(cls, value):
+    def _coerce_extensions(cls, value: Any) -> dict[str, str] | None:
         if value is None:
             return None
         if isinstance(value, dict):
@@ -108,7 +109,7 @@ class Appliance(BaseModel):
 
     @field_validator("ProductModelExtensions", mode="before")
     @classmethod
-    def _coerce_provisioning_extensions(cls, value):
+    def _coerce_provisioning_extensions(cls, value: Any) -> dict[str, str] | None:
         """Keep the raw extension dict but normalise string values to strings."""
         if value is None:
             return None
@@ -177,12 +178,20 @@ class TimerPeriod(BaseModel):
     Temperature: float
 
     @property
-    def start_time_obj(self) -> time:
-        return datetime.strptime(self.StartTime, "%H:%M:%S").time()
+    def start_time_obj(self) -> time | None:
+        """Parse StartTime as a time object (None if malformed)."""
+        try:
+            return datetime.strptime(self.StartTime, "%H:%M:%S").time()
+        except (ValueError, TypeError):
+            return None
 
     @property
-    def end_time_obj(self) -> time:
-        return datetime.strptime(self.EndTime, "%H:%M:%S").time()
+    def end_time_obj(self) -> time | None:
+        """Parse EndTime as a time object (None if malformed)."""
+        try:
+            return datetime.strptime(self.EndTime, "%H:%M:%S").time()
+        except (ValueError, TypeError):
+            return None
 
 
 class TimerModeSettings(BaseModel):
