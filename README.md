@@ -249,6 +249,25 @@ If `parse_telemetry_points` returns an empty list, the API likely returned an un
 
 The GDHV cloud API has rate limits. If you hit them, back off for a few minutes before retrying. The library does not currently implement automatic retries with back-off.
 
+
+## CLI
+
+Install the package (or an editable install) to get the `dimplex` console script:
+
+```bash
+pip install dimplex-controller
+export DIMPLEX_REFRESH_TOKEN=...   # never commit this
+dimplex login
+dimplex hubs
+dimplex zones --hub <hub-id> -v
+dimplex status <hub-id> <appliance-id>
+dimplex energy <hub-id> --days 30
+# control writes require --yes
+dimplex boost <hub-id> <appliance-id> --minutes 60 --yes
+```
+
+Tokens can also come from a JSON file (`--tokens-file` / `DIMPLEX_TOKENS_FILE`) with keys `refresh_token`, `access_token`, `expires_at`. Secrets are redacted in CLI output unless `--show-tokens` is passed.
+
 ## Contributing
 
 Contributions are welcome! Please read the [contributing guidelines](CONTRIBUTING.md) before opening a pull request.
