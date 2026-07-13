@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.8.0...v0.9.0) (2026-07-13)
+
+
+### Features
+
+* structured auth errors and raise AuthManager coverage ([#45](https://github.com/KRoperUK/dimplex-controller-py/issues/45)) ([c737cfe](https://github.com/KRoperUK/dimplex-controller-py/commit/c737cfe1054e4f3f5d923520906e7eb316aba845))
+
 ## [0.8.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.7.0...v0.8.0) (2026-07-13)
 
 
