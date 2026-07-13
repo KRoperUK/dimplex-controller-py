@@ -24,6 +24,7 @@ from .models import (
     ApplianceModeSettings,
     ApplianceStatus,
     Hub,
+    ProductModel,
     TimerMode,
     TimerModeSettings,
     TimerPeriod,
@@ -173,6 +174,16 @@ class DimplexControl:
         """Get user profile/context."""
         data = await self._request("GET", "/Identity/GetUserContext")
         return UserContext.model_validate(data)
+
+    async def get_product_models(self) -> list[ProductModel]:
+        """Return the cloud product catalogue (models + provisioning metadata).
+
+        The catalogue is largely static; callers may cache the result.
+        """
+        data = await self._request("GET", "/Appliances/GetProductModels")
+        if not data:
+            return []
+        return [ProductModel.model_validate(item) for item in data]
 
     async def get_appliance_features(self, hub_id: str, appliance_id: str) -> TimerModeSettings:
         """Get timer details (and mode) for an appliance."""

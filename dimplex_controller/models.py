@@ -4,7 +4,7 @@ import json
 from datetime import datetime, time
 from enum import IntEnum, IntFlag
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class TimerMode(IntEnum):
@@ -39,7 +39,15 @@ class AutomaticProvisioning(BaseModel):
 
     The cloud stores this as a JSON string; :class:`Appliance` decodes it
     automatically so callers can read the heater's electrical characteristics.
+
+    Observed units (from product catalogue / live Quantum payloads):
+
+    * power ratings — kW
+    * charge capacity — kWh
+    * charge element resistance — ohms
     """
+
+    model_config = ConfigDict(populate_by_name=True)
 
     bottom_element_power_rating: float | None = Field(None, alias="bottomElementPowerRating")
     top_element_power_rating: float | None = Field(None, alias="topElementPowerRating")
@@ -47,6 +55,38 @@ class AutomaticProvisioning(BaseModel):
     charge_capacity: float | None = Field(None, alias="chargeCapacity")
     charge_element_resistance: float | None = Field(None, alias="chargeElementResistance")
     power_offset: float | None = Field(None, alias="powerOffset")
+
+
+class ProductModel(BaseModel):
+    """A row from ``GET /Appliances/GetProductModels``."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    ProductModelId: str | None = None
+    ProductTypeId: str | None = None
+    ProductModelName: str | None = None
+    ProductTypeName: str | None = None
+    ProductModelExtensions: dict[str, str] | None = None
+
+    @field_validator("ProductModelExtensions", mode="before")
+    @classmethod
+    def _coerce_extensions(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, dict):
+            return {str(k): v if isinstance(v, str) else json.dumps(v) for k, v in value.items()}
+        return value
+
+    @property
+    def automatic_provisioning(self) -> AutomaticProvisioning | None:
+        """Return decoded AUTOMATIC_PROVISIONING, if present."""
+        raw = (self.ProductModelExtensions or {}).get("AUTOMATIC_PROVISIONING")
+        if not raw:
+            return None
+        try:
+            return AutomaticProvisioning.model_validate_json(raw)
+        except (json.JSONDecodeError, ValueError):
+            return None
 
 
 class Appliance(BaseModel):

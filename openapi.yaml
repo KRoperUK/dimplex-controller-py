@@ -432,3 +432,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TsiEnergyReport"
+
+  /Appliances/GetProductModels:
+    get:
+      summary: List product models in the catalogue
+      responses:
+        "200":
+          description: Product model list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
