@@ -1,28 +1,47 @@
 """Dimplex Controller Client."""
 
+from .auth import TokenBundle
 from .client import DimplexControl
 from .exceptions import DimplexApiError, DimplexAuthError, DimplexConnectionError, DimplexError
 from .models import (
     Appliance,
+    ApplianceModeFlag,
     ApplianceModeSettings,
     ApplianceStatus,
     AutomaticProvisioning,
     Hub,
+    TimerMode,
+    TimerModeSettings,
+    TimerPeriod,
     TsiEnergyReport,
     Zone,
 )
-from .telemetry import VALUE_KEY_T2, parse_telemetry_points
+from .telemetry import (
+    VALUE_KEY_T2,
+    EnergySummary,
+    filter_telemetry_points,
+    parse_telemetry_points,
+    summarise_energy,
+)
 
 __all__ = [
     "DimplexControl",
+    "TokenBundle",
     "Hub",
     "Zone",
     "Appliance",
     "ApplianceStatus",
     "ApplianceModeSettings",
+    "ApplianceModeFlag",
+    "TimerMode",
+    "TimerModeSettings",
+    "TimerPeriod",
     "AutomaticProvisioning",
     "TsiEnergyReport",
     "parse_telemetry_points",
+    "filter_telemetry_points",
+    "summarise_energy",
+    "EnergySummary",
     "VALUE_KEY_T2",
     "DimplexError",
     "DimplexApiError",

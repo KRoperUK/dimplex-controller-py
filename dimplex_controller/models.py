@@ -1,7 +1,37 @@
+from __future__ import annotations
+
 import json
 from datetime import datetime, time
+from enum import IntEnum, IntFlag
 
 from pydantic import BaseModel, Field, field_validator
+
+
+class TimerMode(IntEnum):
+    """Observed timer / operation mode values for ``TimerModeSettings.TimerMode``.
+
+    Exact product names vary by appliance firmware; these are the values used
+    by the Dimplex Control mobile client and reverse-engineered traffic.
+    """
+
+    USER_TIMER = 0
+    MANUAL = 1
+    FROST_PROTECTION = 2
+    OFF = 3
+
+
+class ApplianceModeFlag(IntFlag):
+    """Bit flags for ``ApplianceStatus.ApplianceModes`` / mode write payloads.
+
+    Only bits confirmed in traffic or the official app docs are named.
+    ``BOOST`` (16) is used by the mobile app for boost mode.
+    ``AWAY`` (32) is inferred from status frame pairing with Away* fields —
+    treat as best-effort until more captures confirm it for every model.
+    """
+
+    NONE = 0
+    BOOST = 16
+    AWAY = 32
 
 
 class AutomaticProvisioning(BaseModel):
@@ -137,7 +167,7 @@ class ApplianceStatus(BaseModel):
     StatusTwo: int | None = None
     ApplianceModes: int | None = None
     RoomTemperature: float | None = None
-    ActiveSetPointTemperature: int | None = None
+    ActiveSetPointTemperature: float | None = None
     NormalTemperature: float | None = None
     AwayDateTime: str | None = None
     AwayTemperature: float | None = None
@@ -153,6 +183,27 @@ class ApplianceStatus(BaseModel):
     LockStatus: int | None = None
     ErrorCode: str | None = None
     WarningCode: str | None = None
+
+    @property
+    def mode_flags(self) -> ApplianceModeFlag:
+        """Return ``ApplianceModes`` as a typed flag set."""
+        if self.ApplianceModes is None:
+            return ApplianceModeFlag.NONE
+        return ApplianceModeFlag(self.ApplianceModes)
+
+    @property
+    def is_boost_active(self) -> bool:
+        """True when boost duration is set or the boost mode bit is present."""
+        if self.BoostDuration is not None and self.BoostDuration > 0:
+            return True
+        return bool(self.mode_flags & ApplianceModeFlag.BOOST)
+
+    @property
+    def is_away_active(self) -> bool:
+        """True when away fields indicate an active away session."""
+        if self.AwayDateTime and self.AwayDateTime not in ("", "0001-01-01T00:00:00"):
+            return True
+        return bool(self.mode_flags & ApplianceModeFlag.AWAY)
 
 
 class ApplianceModeSettings(BaseModel):

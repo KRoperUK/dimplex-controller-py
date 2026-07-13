@@ -155,3 +155,49 @@ def test_t2_only_points():
         ]
     )
     assert out == [(datetime(2026, 1, 1, tzinfo=timezone.utc), 0.36)]
+
+
+def test_summarise_lifetime():
+    from dimplex_controller.telemetry import summarise_energy
+
+    points = [
+        (datetime(2026, 1, 1, tzinfo=timezone.utc), 1.0),
+        (datetime(2026, 1, 2, tzinfo=timezone.utc), 2.5),
+        (datetime(2026, 1, 3, tzinfo=timezone.utc), 0.5),
+    ]
+    summary = summarise_energy(points, mode="lifetime")
+    assert summary.total_kwh == 4.0
+    assert summary.point_count == 3
+    assert summary.start == datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assert summary.end == datetime(2026, 1, 3, tzinfo=timezone.utc)
+    assert summary.mode == "lifetime"
+
+
+def test_summarise_daily_local_midnight():
+    from zoneinfo import ZoneInfo
+
+    from dimplex_controller.telemetry import summarise_energy
+
+    london = ZoneInfo("Europe/London")
+    # mid-afternoon London on 2 Jan
+    now = datetime(2026, 1, 2, 15, 0, tzinfo=london)
+    points = [
+        (datetime(2026, 1, 1, tzinfo=timezone.utc), 1.0),
+        (datetime(2026, 1, 2, tzinfo=timezone.utc), 2.5),
+        (datetime(2026, 1, 3, tzinfo=timezone.utc), 9.0),
+    ]
+    summary = summarise_energy(points, mode="daily", now=now, tz=london)
+    assert summary.total_kwh == 2.5
+    assert summary.point_count == 1
+    assert summary.mode == "daily"
+    assert summary.start is not None
+    assert summary.start.astimezone(london).hour == 0
+
+
+def test_summarise_from_raw_payload():
+    from dimplex_controller.telemetry import summarise_energy
+
+    raw = [{"TS": 1767225600, "T1": 7.46}, {"TS": 1767312000, "T1": 8.02}]
+    summary = summarise_energy(raw, mode="lifetime")
+    assert summary.total_kwh == 15.48
+    assert summary.point_count == 2

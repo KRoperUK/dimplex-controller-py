@@ -397,8 +397,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [TsiReportType, Interval, StartDate, IncludePreviousPeriod]
+              required: [TsiReportType, Interval, StartDate, EndDate, IncludePreviousPeriod]
               properties:
+                HubId:
+                  type: string
+                  description: Hub identifier. Recommended; some deployments require it.
                 TsiReportType:
                   type: integer
                   description: |
@@ -411,8 +414,17 @@ paths:
                 StartDate:
                   type: string
                   format: date-time
+                EndDate:
+                  type: string
+                  format: date-time
+                  description: End of the requested window (inclusive). Required by live API.
                 IncludePreviousPeriod:
                   type: boolean
+                  description: |
+                    When true, the cloud often returns the full available daily
+                    history (not only StartDate→EndDate). When false and heaters
+                    are idle, lists may be empty. Clients should filter for
+                    daily/lifetime totals.
       responses:
         "200":
           description: Telemetry data per appliance

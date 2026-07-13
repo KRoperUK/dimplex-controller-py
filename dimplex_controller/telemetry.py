@@ -8,13 +8,28 @@ sends into ``(timestamp, value)`` tuples.
 
 Real-world payloads have been observed using ``TS`` (Unix-epoch timestamp)
 with either ``T1`` or ``ST`` as the energy value key.
+
+Important cloud semantics (live-verified):
+
+* With ``IncludePreviousPeriod=true`` the cloud often returns **the full
+  available daily history** (from first telem / install), not just the
+  ``StartDate``→``EndDate`` window.
+* With ``IncludePreviousPeriod=false`` and idle heaters, lists may be empty.
+* Points are typically **one kWh sample per calendar day**, not a continuous
+  cumulative counter.
+
+Use :func:`summarise_energy` for the two product totals:
+
+* ``daily`` — kWh for the local calendar day (from local midnight)
+* ``lifetime`` — sum of all parsed points (earliest → latest)
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from datetime import datetime, timezone
-from typing import Any
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
+from datetime import date, datetime, time, timezone, tzinfo
+from typing import Any, Literal
 
 # Keys the cloud has been observed using, in priority order. The first match
 # wins. Case-insensitive lookup is done by lowercasing the dict before
@@ -51,6 +66,28 @@ VALUE_KEY_T2 = (
     "kwh2",
     "energy2",
 )
+
+EnergyMode = Literal["daily", "lifetime", "window"]
+TelemetryPoint = tuple[datetime | None, float]
+
+
+@dataclass(frozen=True, slots=True)
+class EnergySummary:
+    """Aggregated energy for a set of telemetry points.
+
+    Attributes:
+        total_kwh: Sum of point values in kWh.
+        point_count: Number of points included in the total.
+        start: Earliest timestamp among included points (or day start for daily).
+        end: Latest timestamp among included points (or None).
+        mode: Aggregation mode used to produce this summary.
+    """
+
+    total_kwh: float
+    point_count: int
+    start: datetime | None
+    end: datetime | None
+    mode: EnergyMode
 
 
 def _coerce_timestamp(raw: Any) -> datetime | None:
@@ -114,7 +151,7 @@ def parse_telemetry_points(
     points: Any,
     *,
     value_keys: tuple[str, ...] | None = None,
-) -> list[tuple[datetime | None, float]]:
+) -> list[TelemetryPoint]:
     """Normalise a list of telemetry points into ``(timestamp, value)`` pairs.
 
     Each entry in ``points`` may be:
@@ -136,7 +173,7 @@ def parse_telemetry_points(
     value_key_order = value_keys if value_keys is not None else _DEFAULT_VALUE_KEYS
     timestamp_keys = _DEFAULT_TIMESTAMP_KEYS
 
-    out: list[tuple[datetime | None, float]] = []
+    out: list[TelemetryPoint] = []
     for point in points:
         ts: datetime | None = None
         value: float | None = None
@@ -158,3 +195,110 @@ def parse_telemetry_points(
             continue
         out.append((ts, value))
     return out
+
+
+def _ensure_aware(ts: datetime, default_tz: tzinfo) -> datetime:
+    """Return ``ts`` with a timezone; naive datetimes are assumed ``default_tz``."""
+    if ts.tzinfo is None:
+        return ts.replace(tzinfo=default_tz)
+    return ts
+
+
+def local_midnight(now: datetime, tz: tzinfo) -> datetime:
+    """Return the start of the local calendar day containing ``now``."""
+    local = _ensure_aware(now, tz).astimezone(tz)
+    return datetime.combine(local.date(), time.min, tzinfo=tz)
+
+
+def filter_telemetry_points(
+    points: Sequence[TelemetryPoint],
+    *,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    on_date: date | None = None,
+    tz: tzinfo = timezone.utc,
+) -> list[TelemetryPoint]:
+    """Filter parsed points by absolute window and/or local calendar date.
+
+    * ``start`` / ``end`` are inclusive bounds (compared in UTC).
+    * ``on_date`` keeps points whose local date (in ``tz``) equals that day.
+    Points with a missing timestamp are dropped when any filter is active.
+    """
+    if start is None and end is None and on_date is None:
+        return list(points)
+
+    start_utc = _ensure_aware(start, tz).astimezone(timezone.utc) if start is not None else None
+    end_utc = _ensure_aware(end, tz).astimezone(timezone.utc) if end is not None else None
+
+    out: list[TelemetryPoint] = []
+    for ts, value in points:
+        if ts is None:
+            continue
+        aware = _ensure_aware(ts, timezone.utc)
+        if start_utc is not None and aware < start_utc:
+            continue
+        if end_utc is not None and aware > end_utc:
+            continue
+        if on_date is not None and aware.astimezone(tz).date() != on_date:
+            continue
+        out.append((aware, value))
+    return out
+
+
+def summarise_energy(
+    points: Sequence[TelemetryPoint] | Any,
+    *,
+    mode: EnergyMode = "lifetime",
+    now: datetime | None = None,
+    tz: tzinfo = timezone.utc,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    value_keys: tuple[str, ...] | None = None,
+) -> EnergySummary:
+    """Aggregate telemetry into a daily, lifetime, or custom-window total.
+
+    ``points`` may be raw cloud payloads or already-parsed
+    :data:`TelemetryPoint` tuples. When raw, they are passed through
+    :func:`parse_telemetry_points` first.
+    """
+    parsed: list[TelemetryPoint]
+    if (
+        isinstance(points, Sequence)
+        and not isinstance(points, str | bytes)
+        and points
+        and isinstance(points[0], tuple)
+        and len(points[0]) == 2
+    ):
+        parsed = list(points)  # type: ignore[arg-type]
+    else:
+        parsed = parse_telemetry_points(points, value_keys=value_keys)
+
+    ref_now = now if now is not None else datetime.now(timezone.utc)
+    ref_now = _ensure_aware(ref_now, tz)
+
+    if mode == "daily":
+        day = ref_now.astimezone(tz).date()
+        selected = filter_telemetry_points(parsed, on_date=day, tz=tz)
+        day_start = local_midnight(ref_now, tz)
+        timestamps = [ts for ts, _ in selected if ts is not None]
+        total = sum(v for _, v in selected)
+        return EnergySummary(
+            total_kwh=round(total, 3),
+            point_count=len(selected),
+            start=day_start,
+            end=max(timestamps) if timestamps else None,
+            mode="daily",
+        )
+
+    # lifetime — include every parseable point; window — optional start/end filter
+    selected = filter_telemetry_points(parsed, start=start, end=end, tz=tz) if mode == "window" else list(parsed)
+
+    timestamps = [ts for ts, _ in selected if ts is not None]
+    total = sum(v for _, v in selected)
+    return EnergySummary(
+        total_kwh=round(total, 3),
+        point_count=len(selected),
+        start=min(timestamps) if timestamps else None,
+        end=max(timestamps) if timestamps else None,
+        mode=mode,
+    )
