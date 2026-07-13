@@ -170,7 +170,11 @@ for appliance_id, telemetry in report.ApplianceTelemetryData.items():
     print(f"{appliance_id}: today={daily.total_kwh} kWh, lifetime={lifetime.total_kwh} kWh")
 ```
 
-`parse_telemetry_points` normalises firmware-varying point shapes. `summarise_energy` builds **daily** (local midnight) and **lifetime** totals. With `include_previous_period=True` the cloud often returns full history — filter client-side rather than trusting `days_back` alone.
+`parse_telemetry_points` normalises firmware-varying point shapes. `summarise_energy` builds **daily** (local midnight) and **lifetime** totals **per register**. `T1` (off-peak / cheaper) and `T2` (peak / more expensive) must not be summed; parse with `VALUE_KEY_T1` / `VALUE_KEY_T2`. With `include_previous_period=True` the cloud often returns full history — filter client-side rather than trusting `days_back` alone.
+
+## Compatibility
+
+See [docs/compatibility.md](docs/compatibility.md) for the library ↔ Home Assistant version matrix.
 
 ## Configuration
 
@@ -249,7 +253,36 @@ If `parse_telemetry_points` returns an empty list, the API likely returned an un
 
 The GDHV cloud API has rate limits. If you hit them, back off for a few minutes before retrying. The library does not currently implement automatic retries with back-off.
 
+
+## CLI
+
+Install the package (or an editable install) to get the `dimplex` console script:
+
+```bash
+pip install dimplex-controller
+export DIMPLEX_REFRESH_TOKEN=...   # never commit this
+dimplex login
+dimplex hubs
+dimplex zones --hub <hub-id> -v
+dimplex status <hub-id> <appliance-id>
+dimplex energy <hub-id> --days 30
+# control writes require --yes
+dimplex boost <hub-id> <appliance-id> --minutes 60 --yes
+```
+
+Tokens can also come from a JSON file (`--tokens-file` / `DIMPLEX_TOKENS_FILE`) with keys `refresh_token`, `access_token`, `expires_at`. Secrets are redacted in CLI output unless `--show-tokens` is passed.
+
 ## Contributing
+
+### Branch protection (`main`)
+
+Pull requests into `main` must keep the **`ci`** GitHub Actions check green.
+
+- Changes under `dimplex_controller/`, `tests/`, or CI config run **lint**, **pre-commit**, and the **pytest matrix** (Python 3.10–3.13). The `ci` job fails if any of those fail.
+- Docs-only PRs still report a green `ci` without running the full matrix.
+
+Direct pushes to `main` are blocked (PR + squash only; no force-push/delete). Commits must be signed (repo-wide rule).
+
 
 Contributions are welcome! Please read the [contributing guidelines](CONTRIBUTING.md) before opening a pull request.
 

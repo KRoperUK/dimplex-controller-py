@@ -28,6 +28,7 @@ from .models import (
     Zone,
 )
 from .telemetry import (
+    VALUE_KEY_T1,
     VALUE_KEY_T2,
     EnergySummary,
     filter_telemetry_points,
@@ -56,6 +57,7 @@ __all__ = [
     "filter_telemetry_points",
     "summarise_energy",
     "EnergySummary",
+    "VALUE_KEY_T1",
     "VALUE_KEY_T2",
     "DimplexError",
     "DimplexApiError",
