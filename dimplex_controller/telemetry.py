@@ -7,7 +7,17 @@ and varies between firmware versions, so we normalise whatever the cloud
 sends into ``(timestamp, value)`` tuples.
 
 Real-world payloads have been observed using ``TS`` (Unix-epoch timestamp)
-with either ``T1`` or ``ST`` as the energy value key.
+with either ``T1`` or ``ST`` as the energy value key. Some appliances also
+report a secondary register ``T2`` on the same point.
+
+**T1 and T2 must stay separate.** They are dual-rate tariff registers, not
+dual samples of the same meter:
+
+* **T1** — off-peak (cheaper rate)
+* **T2** — peak (more expensive rate)
+
+Never sum T1+T2 into a single "total energy" figure, and never fall back from
+T1 parsing to T2 values (or vice versa).
 
 Important cloud semantics (live-verified):
 
@@ -18,10 +28,10 @@ Important cloud semantics (live-verified):
 * Points are typically **one kWh sample per calendar day**, not a continuous
   cumulative counter.
 
-Use :func:`summarise_energy` for the two product totals:
+Use :func:`summarise_energy` for the two product totals **per register**:
 
 * ``daily`` — kWh for the local calendar day (from local midnight)
-* ``lifetime`` — sum of all parsed points (earliest → latest)
+* ``lifetime`` — sum of all parsed points for that register only
 """
 
 from __future__ import annotations
@@ -44,7 +54,10 @@ _DEFAULT_TIMESTAMP_KEYS = (
     "from",
     "start",
 )
-_DEFAULT_VALUE_KEYS = (
+
+# Primary / off-peak energy register (T1 / single-register appliances).
+# Intentionally excludes ``t2`` so off-peak and peak series are never mixed.
+VALUE_KEY_T1 = (
     "t1",
     "st",  # Observed on QRAD050F / QRAD075F energy reports (see dimplex-controller-hass #27).
     "value",
@@ -54,18 +67,20 @@ _DEFAULT_VALUE_KEYS = (
     "energykwh",
     "amount",
     "v",
-    # Fallback for appliances that only report the secondary register.
-    "t2",
 )
 
-# Secondary energy register observed for some Quantum appliances. Points may
-# contain both ``T1`` and ``T2`` in the same payload.
+# Secondary / peak energy register (T2) observed for some Quantum appliances.
+# Points may contain both ``T1`` and ``T2`` in the same payload — parse each
+# with its own key list; do not combine.
 VALUE_KEY_T2 = (
     "t2",
     "value2",
     "kwh2",
     "energy2",
 )
+
+# Backwards-compatible alias for the primary register key list.
+_DEFAULT_VALUE_KEYS = VALUE_KEY_T1
 
 EnergyMode = Literal["daily", "lifetime", "window"]
 TelemetryPoint = tuple[datetime | None, float]
@@ -135,7 +150,7 @@ def _coerce_value(raw: Any) -> float | None:
     return None
 
 
-def _iter_items(point: Any) -> Iterable[tuple[str, Any]] | None:
+def _iter_items(point: Any, value_keys: tuple[str, ...]) -> Iterable[tuple[str, Any]] | None:
     """Yield ``(key, value)`` pairs from a dict-like ``point``.
 
     Returns ``None`` for non-dict points so the caller can fall through to the
@@ -144,7 +159,7 @@ def _iter_items(point: Any) -> Iterable[tuple[str, Any]] | None:
     if not isinstance(point, dict):
         return None
     lower = {str(k).lower(): v for k, v in point.items()}
-    return ((k, lower.get(k)) for k in (*_DEFAULT_TIMESTAMP_KEYS, *_DEFAULT_VALUE_KEYS, *VALUE_KEY_T2))
+    return ((k, lower.get(k)) for k in (*_DEFAULT_TIMESTAMP_KEYS, *value_keys))
 
 
 def parse_telemetry_points(
@@ -160,9 +175,10 @@ def parse_telemetry_points(
     * a 2-element ``[timestamp, value]`` list or tuple
     * a bare scalar (treated as a cumulative value at an unknown timestamp)
 
-    ``value_keys`` overrides the value-key priority list. Use
-    :data:`VALUE_KEY_T2` to extract the secondary energy register when the
-    cloud returns both ``T1`` and ``T2`` in the same payload.
+    ``value_keys`` overrides the value-key priority list. Defaults to
+    :data:`VALUE_KEY_T1` (primary register only). Use :data:`VALUE_KEY_T2` to
+    extract the secondary register. T1 and T2 must be parsed separately —
+    never pass a key list that mixes both if you need tariff-accurate totals.
 
     Unparseable entries are silently skipped. The order of the input list is
     preserved.
@@ -170,7 +186,7 @@ def parse_telemetry_points(
     if not isinstance(points, list):
         return []
 
-    value_key_order = value_keys if value_keys is not None else _DEFAULT_VALUE_KEYS
+    value_key_order = value_keys if value_keys is not None else VALUE_KEY_T1
     timestamp_keys = _DEFAULT_TIMESTAMP_KEYS
 
     out: list[TelemetryPoint] = []
@@ -178,7 +194,7 @@ def parse_telemetry_points(
         ts: datetime | None = None
         value: float | None = None
 
-        items = _iter_items(point)
+        items = _iter_items(point, value_key_order)
         if items is not None:
             for key, raw in items:
                 if key in timestamp_keys and ts is None:
