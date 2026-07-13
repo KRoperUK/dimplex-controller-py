@@ -251,6 +251,16 @@ The GDHV cloud API has rate limits. If you hit them, back off for a few minutes 
 
 ## Contributing
 
+### Branch protection (`main`)
+
+Pull requests into `main` must keep the **`ci`** GitHub Actions check green.
+
+- Changes under `dimplex_controller/`, `tests/`, or CI config run **lint**, **pre-commit**, and the **pytest matrix** (Python 3.10–3.13). The `ci` job fails if any of those fail.
+- Docs-only PRs still report a green `ci` without running the full matrix.
+
+Direct pushes to `main` are blocked (PR + squash only; no force-push/delete). Commits must be signed (repo-wide rule).
+
+
 Contributions are welcome! Please read the [contributing guidelines](CONTRIBUTING.md) before opening a pull request.
 
 Key points:

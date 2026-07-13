@@ -14,7 +14,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Detect whether the change touches library code or CI config. Docs-only PRs
+  # skip lint/test matrix but still get a green `ci` gate so the required
+  # status check on main stays satisfiable.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'dimplex_controller/**'
+              - 'tests/**'
+              - 'pyproject.toml'
+              - 'poetry.lock'
+              - '.pre-commit-config.yaml'
+              - '.github/workflows/test.yml'
+
   lint:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -52,6 +78,8 @@ jobs:
             -e 's/^([^:]+):([0-9]+): note: (.*)$/::notice file=\1,line=\2::\3/'
 
   pre-commit:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -74,6 +102,8 @@ jobs:
         run: pre-commit run --all-files --show-diff-on-failure --color=always
 
   test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -110,3 +140,42 @@ jobs:
 
       - name: Run tests with coverage
         run: poetry run pytest --cov=dimplex_controller --cov-report=term-missing
+
+  # Stable required status check for the `main` branch ruleset.
+  # - Python/code changes: fails unless lint, pre-commit, and the full test matrix succeed
+  # - Docs-only changes: succeeds without running the heavy jobs
+  ci:
+    name: ci
+    needs: [changes, lint, pre-commit, test]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enforce required jobs for code changes
+        run: |
+          set -euo pipefail
+          code="${{ needs.changes.outputs.code }}"
+          echo "code changes: ${code}"
+          echo "lint: ${{ needs.lint.result }}"
+          echo "pre-commit: ${{ needs.pre-commit.result }}"
+          echo "test: ${{ needs.test.result }}"
+
+          if [ "${code}" != "true" ]; then
+            echo "No library/test/CI paths changed — CI gate OK."
+            exit 0
+          fi
+
+          failed=0
+          if [ "${{ needs.lint.result }}" != "success" ]; then
+            echo "::error::lint did not succeed (${{ needs.lint.result }})"
+            failed=1
+          fi
+          if [ "${{ needs.pre-commit.result }}" != "success" ]; then
+            echo "::error::pre-commit did not succeed (${{ needs.pre-commit.result }})"
+            failed=1
+          fi
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "::error::test matrix did not succeed (${{ needs.test.result }})"
+            failed=1
+          fi
+          exit "${failed}"
