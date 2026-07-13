@@ -3,8 +3,9 @@
 [![PyPI version](https://img.shields.io/pypi/v/dimplex-controller.svg)](https://pypi.org/project/dimplex-controller/)
 [![Python versions](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![CI Tests](https://github.com/KRoperUK/dimplex-controller-py/actions/workflows/tests.yml/badge.svg)](https://github.com/KRoperUK/dimplex-controller-py/actions)
+[![CI Tests](https://img.shields.io/github/actions/workflow/status/KRoperUK/dimplex-controller-py/test.yml?branch=main&label=CI)](https://github.com/KRoperUK/dimplex-controller-py/actions/workflows/test.yml)
 [![Downloads](https://img.shields.io/pypi/dm/dimplex-controller.svg)](https://pypi.org/project/dimplex-controller/)
+[![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-donate-yellow.svg)](https://buymeacoffee.com/kroperukc)
 
 <p align="center">
   <strong>Async Python client for controlling Glen Dimplex Heating &amp; Ventilation (GDHV) appliances via the Dimplex cloud API.</strong>
