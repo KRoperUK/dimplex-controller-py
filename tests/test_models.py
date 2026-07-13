@@ -326,3 +326,17 @@ def test_hub_with_connection_state():
     assert hub.NumberOfAppliances == 3
     assert hub.IsServiceModeEnabled is False
     assert hub.LastTelemDate is not None
+
+
+def test_timer_period_malformed_time_returns_none():
+    """Malformed StartTime/EndTime strings return None instead of raising."""
+    period = TimerPeriod(DayOfWeek=0, StartTime="invalid", EndTime="also-bad", Temperature=18.0)
+    assert period.start_time_obj is None
+    assert period.end_time_obj is None
+
+
+def test_timer_period_empty_time_returns_none():
+    """Empty time strings return None."""
+    period = TimerPeriod(DayOfWeek=0, StartTime="", EndTime="", Temperature=18.0)
+    assert period.start_time_obj is None
+    assert period.end_time_obj is None
