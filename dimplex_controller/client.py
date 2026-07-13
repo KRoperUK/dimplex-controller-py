@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import random
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -45,6 +47,12 @@ DEFAULT_TSI_INTERVAL = "01:00:00"
 # Default boost length when the caller does not specify one (minutes).
 DEFAULT_BOOST_MINUTES = 60
 
+# HTTP retry policy (see ``DimplexControl`` constructor).
+DEFAULT_MAX_RETRIES = 3
+DEFAULT_RETRY_BASE_DELAY = 0.5
+DEFAULT_RETRY_MAX_DELAY = 8.0
+_RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+
 
 def _iso_utc_days_ago(days: int) -> str:
     """Return an ISO-8601 UTC timestamp ``days`` before now (no microseconds)."""
@@ -63,11 +71,26 @@ class DimplexControl:
         expires_at: float = 0,
         *,
         token_bundle: TokenBundle | None = None,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        retry_base_delay: float = DEFAULT_RETRY_BASE_DELAY,
+        retry_max_delay: float = DEFAULT_RETRY_MAX_DELAY,
+        retry_non_idempotent: bool = False,
     ):
         """Initialize the client.
 
         Prefer ``token_bundle`` for new code. The individual token kwargs remain
         supported for backwards compatibility.
+
+        Retry policy (centralised on ``_request``):
+
+        * **GET** (and other safe methods): retry on connection errors and
+          HTTP 429/5xx with exponential backoff + jitter; honour ``Retry-After``
+          when present.
+        * **POST/PUT/PATCH/DELETE**: no retries by default (non-idempotent
+          control calls). Set ``retry_non_idempotent=True`` to apply the same
+          policy (use with care).
+        * ``max_retries`` is the number of *retries* after the first attempt
+          (0 disables retries).
         """
         if token_bundle is not None:
             token_data: dict[str, Any] | TokenBundle = token_bundle
@@ -82,6 +105,10 @@ class DimplexControl:
 
         self._session = session
         self.auth = AuthManager(session, token_data)
+        self._max_retries = max(0, int(max_retries))
+        self._retry_base_delay = float(retry_base_delay)
+        self._retry_max_delay = float(retry_max_delay)
+        self._retry_non_idempotent = bool(retry_non_idempotent)
 
     @property
     def is_authenticated(self) -> bool:
@@ -96,8 +123,31 @@ class DimplexControl:
         """Replace in-memory auth tokens."""
         self.auth.apply_tokens(bundle)
 
+    def _should_retry(self, method: str) -> bool:
+        upper = method.upper()
+        if upper in {"GET", "HEAD", "OPTIONS"}:
+            return True
+        return self._retry_non_idempotent
+
+    def _backoff_seconds(self, attempt: int, retry_after: float | None = None) -> float:
+        """Compute delay before the next attempt (``attempt`` is 0-based)."""
+        if retry_after is not None and retry_after >= 0:
+            return min(retry_after, self._retry_max_delay)
+        # Exponential backoff with full jitter: U(0, min(max, base * 2^attempt))
+        ceiling = min(self._retry_max_delay, self._retry_base_delay * (2**attempt))
+        return random.uniform(0, ceiling)
+
+    @staticmethod
+    def _parse_retry_after(header_value: str | None) -> float | None:
+        if not header_value:
+            return None
+        try:
+            return max(0.0, float(header_value.strip()))
+        except ValueError:
+            return None
+
     async def _request(self, method: str, endpoint: str, **kwargs: Any) -> Any:
-        """Make an authenticated request."""
+        """Make an authenticated request with optional retry/backoff."""
         token = await self.auth.get_access_token()
         headers = kwargs.pop("headers", {})
         headers.update(
@@ -118,20 +168,60 @@ class DimplexControl:
         )
 
         url = f"{BASE_URL}{endpoint}"
-        try:
-            async with self._session.request(method, url, headers=headers, **kwargs) as resp:
-                if resp.status != HTTP_OK:
+        allow_retry = self._should_retry(method)
+        attempts = self._max_retries + 1 if allow_retry else 1
+        last_error: Exception | None = None
+
+        for attempt in range(attempts):
+            try:
+                async with self._session.request(method, url, headers=headers, **kwargs) as resp:
+                    if resp.status == HTTP_OK:
+                        if resp.content_length == 0:
+                            return {}
+                        return await resp.json()
+
                     text = await resp.text()
+                    retry_after = self._parse_retry_after(resp.headers.get("Retry-After"))
+                    if allow_retry and resp.status in _RETRYABLE_STATUS and attempt + 1 < attempts:
+                        delay = self._backoff_seconds(attempt, retry_after)
+                        _LOGGER.warning(
+                            "API %s %s failed with %s; retry %s/%s in %.2fs",
+                            method,
+                            endpoint,
+                            resp.status,
+                            attempt + 1,
+                            self._max_retries,
+                            delay,
+                        )
+                        last_error = DimplexApiError(resp.status, text)
+                        await asyncio.sleep(delay)
+                        continue
+
                     _LOGGER.error("API request failed: %s - %s", resp.status, text)
                     raise DimplexApiError(resp.status, text)
+            except aiohttp.ClientError as e:
+                if allow_retry and attempt + 1 < attempts:
+                    delay = self._backoff_seconds(attempt)
+                    _LOGGER.warning(
+                        "Connection error on %s %s; retry %s/%s in %.2fs: %s",
+                        method,
+                        endpoint,
+                        attempt + 1,
+                        self._max_retries,
+                        delay,
+                        e,
+                    )
+                    last_error = DimplexConnectionError(f"Connection error: {e}")
+                    await asyncio.sleep(delay)
+                    continue
+                _LOGGER.error("Connection error during API request: %s", e)
+                raise DimplexConnectionError(f"Connection error: {e}") from e
 
-                # API might return empty body for some calls
-                if resp.content_length == 0:
-                    return {}
-                return await resp.json()
-        except aiohttp.ClientError as e:
-            _LOGGER.error("Connection error during API request: %s", e)
-            raise DimplexConnectionError(f"Connection error: {e}") from e
+        if isinstance(last_error, DimplexApiError):
+            raise last_error
+        if isinstance(last_error, DimplexConnectionError):
+            raise last_error
+        raise DimplexConnectionError("Request failed after retries")
 
     async def get_hubs(self) -> list[Hub]:
         """Get all hubs for the user."""
