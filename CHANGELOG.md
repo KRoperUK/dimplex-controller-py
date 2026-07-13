@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.1](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.10.0...v0.10.1) (2026-07-13)
+
+
+### Bug Fixes
+
+* document and test the empty-overview (HTTP 200) return value ([#67](https://github.com/KRoperUK/dimplex-controller-py/issues/67)) ([642dde3](https://github.com/KRoperUK/dimplex-controller-py/commit/642dde3de4e882699ebe9f26b845b8871a9d11cd))
+
 ## [0.10.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.9.0...v0.10.0) (2026-07-13)
 
 
