@@ -42,6 +42,20 @@ The pre-commit suite is the same set of checks CI runs.
    via release-please.
 4. Issue that pull request!
 
+### Required checks before merge to `main`
+
+The `main` branch ruleset requires:
+
+* a **pull request** (squash merge only; no force-push / branch delete)
+* a green **`ci`** status check
+* **signed commits** (repo-wide rule on all branches)
+
+When your PR changes library code (`dimplex_controller/`), tests, lockfiles, or
+`.github/workflows/test.yml`, CI runs **lint**, **pre-commit**, and **pytest**
+on Python 3.10–3.13. The aggregate `ci` job fails unless all of those succeed.
+
+Docs-only PRs still get a green `ci` without the full matrix.
+
 ## Releases
 
 Releases are managed by [release-please](https://github.com/googleapis/release-please).
