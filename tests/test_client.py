@@ -58,9 +58,7 @@ async def test_get_hubs_empty(aresponses):
 @pytest.mark.asyncio
 async def test_get_hub_zones(aresponses):
     """Test getting zones for a hub."""
-    zone_body = (
-        '[{"ZoneId": "z1", "ZoneName": "Living Room", ' '"HubId": "123", "ZoneType": "Heating", "Appliances": []}]'
-    )
+    zone_body = '[{"ZoneId": "z1", "ZoneName": "Living Room", "HubId": "123", "ZoneType": "Heating", "Appliances": []}]'
     aresponses.add(
         "mobileapi.gdhv-iot.com",
         "/api/Zones/GetZonesAndAppliancesForHubId",
@@ -187,9 +185,7 @@ async def test_is_authenticated(aresponses):
 async def test_get_tsi_energy_report(aresponses):
     """The Tsi energy report is parsed into a TsiEnergyReport model."""
     body = (
-        '{"HubId":"hub-1",'
-        '"ApplianceTelemetryData":{"a-1":[{"timestamp":"2026-06-01T00:00:00Z","value":0.1}],'
-        '"a-2":[]}}'
+        '{"HubId":"hub-1","ApplianceTelemetryData":{"a-1":[{"timestamp":"2026-06-01T00:00:00Z","value":0.1}],"a-2":[]}}'
     )
     aresponses.add(
         "mobileapi.gdhv-iot.com",
