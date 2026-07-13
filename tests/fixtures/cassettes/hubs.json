@@ -1,0 +1,11 @@
+[
+  {
+    "HubId": "hub-demo-001",
+    "HubName": "Demo Hub",
+    "FriendlyName": "Demo Hub",
+    "ConnectionState": 1,
+    "NumberOfZones": 1,
+    "NumberOfAppliances": 1,
+    "PrimaryUserEmail": "user@example.com"
+  }
+]

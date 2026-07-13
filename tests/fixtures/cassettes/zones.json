@@ -1,0 +1,21 @@
+[
+  {
+    "ZoneId": "zone-1",
+    "ZoneName": "Living Room",
+    "HubId": "hub-demo-001",
+    "ZoneType": "Heating",
+    "Appliances": [
+      {
+        "ApplianceId": "app-1",
+        "ApplianceType": "Quantum",
+        "ApplianceModel": "QM100RF",
+        "ZoneId": "zone-1",
+        "FriendlyName": "Living Room Heater",
+        "ZoneName": "Living Room",
+        "ProductModelExtensions": {
+          "AUTOMATIC_PROVISIONING": "{\"ratedPower\": 2.22, \"chargeCapacity\": 15.5}"
+        }
+      }
+    ]
+  }
+]
