@@ -172,6 +172,10 @@ for appliance_id, telemetry in report.ApplianceTelemetryData.items():
 
 `parse_telemetry_points` normalises firmware-varying point shapes. `summarise_energy` builds **daily** (local midnight) and **lifetime** totals. With `include_previous_period=True` the cloud often returns full history — filter client-side rather than trusting `days_back` alone.
 
+## Compatibility
+
+See [docs/compatibility.md](docs/compatibility.md) for the library ↔ Home Assistant version matrix.
+
 ## Configuration
 
 | Environment variable | Purpose |
