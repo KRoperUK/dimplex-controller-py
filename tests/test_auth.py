@@ -35,8 +35,7 @@ var SETTINGS = {"csrf":"csrf-token-value","transId":"StateProperties=abc123"};
 """
 
 AUTHORIZE_URL = (
-    "https://gdhvb2c.b2clogin.com/tfp/gdhvb2c.onmicrosoft.com/"
-    "B2C_1A_DimplexControlSignupSignin/oauth2/v2.0/authorize"
+    "https://gdhvb2c.b2clogin.com/tfp/gdhvb2c.onmicrosoft.com/B2C_1A_DimplexControlSignupSignin/oauth2/v2.0/authorize"
 )
 
 

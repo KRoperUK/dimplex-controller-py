@@ -117,7 +117,7 @@ async def main():
                         try:
                             # Features includes schedule/mode
                             details = await client.get_appliance_features(hub.HubId, appliance.ApplianceId)
-                            print(f"        Mode: {details.TimerMode} | " f"Periods: {len(details.TimerPeriods)}")
+                            print(f"        Mode: {details.TimerMode} | Periods: {len(details.TimerPeriods)}")
                         except Exception as e:
                             print(f"        (Could not fetch details: {e})")
 

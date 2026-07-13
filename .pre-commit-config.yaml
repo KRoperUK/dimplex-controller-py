@@ -9,7 +9,7 @@ repos:
       - id: trailing-whitespace
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.3.0
+    rev: v0.15.21
     hooks:
       # Run the linter first so format auto-fixes don't shadow real issues.
       - id: ruff

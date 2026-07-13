@@ -38,7 +38,7 @@ async def test_get_zone(aresponses):
         captured["body"] = await request.json()
         return _json(
             aresponses,
-            '{"ZoneId":"z1","ZoneName":"Living Room","HubId":"hub-1",' '"ZoneType":"Heating","Appliances":[]}',
+            '{"ZoneId":"z1","ZoneName":"Living Room","HubId":"hub-1","ZoneType":"Heating","Appliances":[]}',
         )
 
     aresponses.add(HOST, "/api/Zones/GetZone", "POST", handler)
