@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.7.0...v0.8.0) (2026-07-13)
+
+
+### Features
+
+* product catalogue API, auth coverage, and dotenv hygiene ([812eb20](https://github.com/KRoperUK/dimplex-controller-py/commit/812eb200085726926390c92f76afc92b7dc70590))
+* product catalogue API, auth coverage, dotenv hygiene ([#43](https://github.com/KRoperUK/dimplex-controller-py/issues/43)) ([812eb20](https://github.com/KRoperUK/dimplex-controller-py/commit/812eb200085726926390c92f76afc92b7dc70590))
+
 ## [0.7.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.6.1...v0.7.0) (2026-07-13)
 
 
