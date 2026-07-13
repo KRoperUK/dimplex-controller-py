@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.10.1...v0.11.0) (2026-07-13)
+
+
+### Features
+
+* bound all requests with a configurable timeout and harden 200-body decoding ([#69](https://github.com/KRoperUK/dimplex-controller-py/issues/69)) ([f705871](https://github.com/KRoperUK/dimplex-controller-py/commit/f705871b00469d4478225b77db2fda3a180778b8))
+
+
+### Documentation
+
+* overhaul API reference, README, and getting-started ([#77](https://github.com/KRoperUK/dimplex-controller-py/issues/77)) ([720a149](https://github.com/KRoperUK/dimplex-controller-py/commit/720a149c02beb06b1d73d52e4e7fd19d63ad33f9))
+
 ## [0.10.1](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.10.0...v0.10.1) (2026-07-13)
 
 
