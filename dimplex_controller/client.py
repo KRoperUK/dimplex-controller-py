@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import aiohttp
 
-from .auth import AuthManager
+from .auth import AuthManager, TokenBundle
 from .const import (
     BASE_URL,
     HEADER_APP_NAME,
@@ -18,10 +20,13 @@ from .const import (
 )
 from .exceptions import DimplexApiError, DimplexConnectionError
 from .models import (
+    ApplianceModeFlag,
     ApplianceModeSettings,
     ApplianceStatus,
     Hub,
+    TimerMode,
     TimerModeSettings,
+    TimerPeriod,
     TsiEnergyReport,
     UserContext,
     Zone,
@@ -30,10 +35,14 @@ from .models import (
 _LOGGER = logging.getLogger(__name__)
 
 # Default lookback when the caller does not pin a start date. The energy
-# endpoint is paginated server-side; 30 days is a reasonable default that
-# keeps the response small while still giving the caller a meaningful window.
+# endpoint is paginated server-side; with IncludePreviousPeriod the cloud
+# often returns the full history regardless, so this mainly bounds the
+# "current window" half of the request.
 DEFAULT_TSI_REPORT_DAYS = 30
 DEFAULT_TSI_INTERVAL = "01:00:00"
+
+# Default boost length when the caller does not specify one (minutes).
+DEFAULT_BOOST_MINUTES = 60
 
 
 def _iso_utc_days_ago(days: int) -> str:
@@ -51,15 +60,24 @@ class DimplexControl:
         refresh_token: str | None = None,
         access_token: str | None = None,
         expires_at: float = 0,
+        *,
+        token_bundle: TokenBundle | None = None,
     ):
-        """Initialize the client."""
-        token_data = {}
-        if refresh_token:
-            token_data["refresh_token"] = refresh_token
-        if access_token:
-            token_data["access_token"] = access_token
-        if expires_at:
-            token_data["expires_at"] = expires_at  # type: ignore[assignment]
+        """Initialize the client.
+
+        Prefer ``token_bundle`` for new code. The individual token kwargs remain
+        supported for backwards compatibility.
+        """
+        if token_bundle is not None:
+            token_data: dict[str, Any] | TokenBundle = token_bundle
+        else:
+            token_data = {}
+            if refresh_token:
+                token_data["refresh_token"] = refresh_token
+            if access_token:
+                token_data["access_token"] = access_token
+            if expires_at:
+                token_data["expires_at"] = expires_at
 
         self._session = session
         self.auth = AuthManager(session, token_data)
@@ -69,7 +87,15 @@ class DimplexControl:
         """Check if authenticated."""
         return self.auth.is_authenticated
 
-    async def _request(self, method: str, endpoint: str, **kwargs) -> dict:
+    def export_tokens(self) -> TokenBundle:
+        """Return the current auth token snapshot."""
+        return self.auth.export_tokens()
+
+    def apply_tokens(self, bundle: TokenBundle | dict[str, Any]) -> None:
+        """Replace in-memory auth tokens."""
+        self.auth.apply_tokens(bundle)
+
+    async def _request(self, method: str, endpoint: str, **kwargs: Any) -> Any:
         """Make an authenticated request."""
         token = await self.auth.get_access_token()
         headers = kwargs.pop("headers", {})
@@ -109,75 +135,163 @@ class DimplexControl:
     async def get_hubs(self) -> list[Hub]:
         """Get all hubs for the user."""
         data = await self._request("GET", "/Hubs/GetUserHubs")
-        # Log analysis shows list of objects
-        return [Hub(**h) for h in data]
+        return [Hub.model_validate(h) for h in data]
 
     async def get_hub_zones(self, hub_id: str) -> list[Zone]:
         """Get zones and appliances for a hub."""
         data = await self._request("GET", "/Zones/GetZonesAndAppliancesForHubId", params={"HubId": hub_id})
-        return [Zone(**z) for z in data]
+        return [Zone.model_validate(z) for z in data]
 
     async def get_zone(self, hub_id: str, zone_id: str) -> Zone:
         """Get details for a specific zone."""
         payload = {"HubId": hub_id, "ZoneId": zone_id}
         data = await self._request("POST", "/Zones/GetZone", json=payload)
-        return Zone(**data)
+        return Zone.model_validate(data)
 
     async def get_appliance_overview(self, hub_id: str, appliance_ids: list[str]) -> list[ApplianceStatus]:
-        """Get status overview for specific appliances."""
+        """Get status overview for specific appliances.
+
+        When appliances are offline the cloud may return an empty list with
+        HTTP 200. That is success — use :meth:`get_appliance_overview_map` if
+        you need a stable id → status mapping.
+        """
         payload = {"HubId": hub_id, "ApplianceIds": appliance_ids}
         data = await self._request("POST", "/RemoteControl/GetApplianceOverview", json=payload)
-        return [ApplianceStatus(**item) for item in data]
+        if not data:
+            return []
+        return [ApplianceStatus.model_validate(item) for item in data]
+
+    async def get_appliance_overview_map(
+        self, hub_id: str, appliance_ids: list[str]
+    ) -> dict[str, ApplianceStatus | None]:
+        """Return a map of appliance id → status (``None`` when missing)."""
+        overview = await self.get_appliance_overview(hub_id, appliance_ids)
+        by_id = {status.ApplianceId: status for status in overview}
+        return {appliance_id: by_id.get(appliance_id) for appliance_id in appliance_ids}
 
     async def get_user_context(self) -> UserContext:
         """Get user profile/context."""
         data = await self._request("GET", "/Identity/GetUserContext")
-        return UserContext(**data)
+        return UserContext.model_validate(data)
 
     async def get_appliance_features(self, hub_id: str, appliance_id: str) -> TimerModeSettings:
         """Get timer details (and mode) for an appliance."""
-        # In the logs, this endpoint returns current mode and timer profiles
         payload = {
             "HubId": hub_id,
             "ApplianceId": appliance_id,
-            "TimerMode": 0,  # Required field in request, value doesn't seem to matter for fetching?
+            "TimerMode": 0,  # Required field in request; value ignored on read
         }
         data = await self._request("POST", "/RemoteControl/GetTimerModeDetailsForAppliance", json=payload)
-        return TimerModeSettings(**data)
+        return TimerModeSettings.model_validate(data)
 
-    async def set_mode(self, hub_id: str, appliance_id: str, mode: int) -> None:
-        """Set the operation mode.
+    async def set_mode(self, hub_id: str, appliance_id: str, mode: int | TimerMode) -> None:
+        """Set the timer / operation mode.
 
-        Modes (inferred):
-        0: Manual? (User Timer?)
-        1: Manual
-        2: Frost Protection
-        3: Off?
+        See :class:`~dimplex_controller.models.TimerMode` for known values.
         """
-        # We need to fetch current settings first to preserve other fields if API requires full object
         current = await self.get_appliance_features(hub_id, appliance_id)
-        current.TimerMode = mode
+        current.TimerMode = int(mode)
 
-        payload = {"TimerModeSettings": current.dict()}
-
+        payload = {"TimerModeSettings": current.model_dump(mode="json")}
         await self._request("POST", "/RemoteControl/SetTimerMode", json=payload)
 
     async def set_target_temperature(self, hub_id: str, appliance_id: str, temp: float) -> None:
-        """Set target temperature.
+        """Set the target / comfort temperature for an appliance.
 
-        WARNING: The logs show setting temperature involves updating the 'TimerPeriods' for the current mode.
-        This client might need to be smarter about which period to update (current active one).
-        For now, this is a placeholder/advanced TODO.
+        The Dimplex cloud stores setpoints on timer periods. This method:
+
+        1. Loads the current timer configuration.
+        2. Updates every period's temperature (preserving day/time windows).
+        3. If no periods exist (common for some Quantum configs), installs a
+           full-week 00:00–23:59 schedule at the requested temperature in
+           manual mode so the cloud has a concrete setpoint to apply.
+
+        This matches the reverse-engineered mobile-app approach of rewriting
+        the active schedule rather than a dedicated "set temperature" RPC.
         """
-        _LOGGER.warning("set_target_temperature not fully implemented - requires complex schedule manipulation")
-        pass
+        current = await self.get_appliance_features(hub_id, appliance_id)
+
+        if current.TimerPeriods:
+            for period in current.TimerPeriods:
+                period.Temperature = float(temp)
+        else:
+            current.TimerMode = int(TimerMode.MANUAL)
+            current.TimerPeriods = [
+                TimerPeriod(
+                    DayOfWeek=day,
+                    StartTime="00:00:00",
+                    EndTime="23:59:59",
+                    Temperature=float(temp),
+                )
+                for day in range(7)
+            ]
+
+        payload = {"TimerModeSettings": current.model_dump(mode="json")}
+        await self._request("POST", "/RemoteControl/SetTimerMode", json=payload)
 
     async def set_appliance_mode(
         self, hub_id: str, appliance_ids: list[str], mode_settings: ApplianceModeSettings
     ) -> None:
         """Set appliance mode (Boost, Away, etc.)."""
-        payload = {"Settings": mode_settings.dict(), "HubId": hub_id, "ApplianceIds": appliance_ids}
+        payload = {
+            "Settings": mode_settings.model_dump(mode="json"),
+            "HubId": hub_id,
+            "ApplianceIds": appliance_ids,
+        }
         await self._request("POST", "/RemoteControl/SetApplianceMode", json=payload)
+
+    async def set_boost(
+        self,
+        hub_id: str,
+        appliance_ids: list[str],
+        *,
+        temperature: float,
+        duration_minutes: int = DEFAULT_BOOST_MINUTES,
+        enable: bool = True,
+    ) -> None:
+        """Enable or disable Boost for one or more appliances.
+
+        The mobile app uses ``ApplianceModes=16`` with ``Status=1`` (on) /
+        ``Status=0`` (off). ``Time`` carries the boost duration in minutes.
+        """
+        settings = ApplianceModeSettings(
+            ApplianceModes=int(ApplianceModeFlag.BOOST),
+            Status=1 if enable else 0,
+            Temperature=float(temperature),
+            Time=int(duration_minutes) if enable else 0,
+        )
+        await self.set_appliance_mode(hub_id, appliance_ids, settings)
+
+    async def clear_boost(self, hub_id: str, appliance_ids: list[str], *, temperature: float = 21.0) -> None:
+        """Disable Boost for the given appliances."""
+        await self.set_boost(hub_id, appliance_ids, temperature=temperature, duration_minutes=0, enable=False)
+
+    async def set_away(
+        self,
+        hub_id: str,
+        appliance_ids: list[str],
+        *,
+        temperature: float,
+        enable: bool = True,
+        number_of_days: int = 0,
+    ) -> None:
+        """Enable or disable Away mode.
+
+        Uses ``ApplianceModes=32`` (best-effort; confirmed via status-frame
+        pairing with Away* fields). Prefer verifying on a live appliance
+        after firmware updates.
+        """
+        settings = ApplianceModeSettings(
+            ApplianceModes=int(ApplianceModeFlag.AWAY),
+            Status=1 if enable else 0,
+            Temperature=float(temperature),
+            NumberOfDays=int(number_of_days) if enable else 0,
+        )
+        await self.set_appliance_mode(hub_id, appliance_ids, settings)
+
+    async def clear_away(self, hub_id: str, appliance_ids: list[str], *, temperature: float = 16.0) -> None:
+        """Disable Away mode for the given appliances."""
+        await self.set_away(hub_id, appliance_ids, temperature=temperature, enable=False)
 
     async def set_eco_start(self, hub_id: str, appliance_ids: list[str], enable: bool) -> None:
         """Enable/Disable EcoStart."""
@@ -196,19 +310,24 @@ class DimplexControl:
         interval: str = DEFAULT_TSI_INTERVAL,
         start_date: str | None = None,
         end_date: str | None = None,
-        include_previous_period: bool = False,
+        include_previous_period: bool = True,
         days_back: int = DEFAULT_TSI_REPORT_DAYS,
     ) -> TsiEnergyReport:
         """Fetch the Time Series Insights energy report for a hub.
 
         Returns a :class:`~dimplex_controller.models.TsiEnergyReport`. Each
         per-appliance list is left as the raw payload — use
-        :func:`dimplex_controller.telemetry.parse_telemetry_points` to
-        normalise the points into ``(timestamp, value)`` tuples.
+        :func:`dimplex_controller.telemetry.parse_telemetry_points` and
+        :func:`dimplex_controller.telemetry.summarise_energy` to normalise
+        and aggregate.
 
         When the hub has no metered appliances (e.g. non-QRAD heaters, or a
         quiet summer hub) the per-appliance lists come back empty; that is
         treated as success, not an error.
+
+        Note: with ``include_previous_period=True`` (the default) the cloud
+        frequently returns the **full available daily history**, not only the
+        ``days_back`` window. Filter client-side for daily/lifetime totals.
         """
         if start_date is None:
             start_date = _iso_utc_days_ago(days_back)

@@ -1,8 +1,13 @@
+from __future__ import annotations
+
 import json
 import logging
 import os
 import re
 import time
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
@@ -19,21 +24,75 @@ from .exceptions import DimplexAuthError
 
 _LOGGER = logging.getLogger(__name__)
 
+TokenListener = Callable[["TokenBundle"], Awaitable[None] | None]
+
+
+@dataclass(frozen=True, slots=True)
+class TokenBundle:
+    """Public, serialisable snapshot of auth tokens."""
+
+    access_token: str | None = None
+    refresh_token: str | None = None
+    expires_at: float = 0.0
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return a plain dict suitable for JSON / config-entry storage."""
+        return {
+            "access_token": self.access_token,
+            "refresh_token": self.refresh_token,
+            "expires_at": self.expires_at,
+        }
+
+    @classmethod
+    def from_mapping(cls, data: dict[str, Any] | None) -> TokenBundle:
+        """Build a bundle from a dict-like token store."""
+        if not data:
+            return cls()
+        return cls(
+            access_token=data.get("access_token"),
+            refresh_token=data.get("refresh_token"),
+            expires_at=float(data.get("expires_at") or 0),
+        )
+
 
 class AuthManager:
     """Manages authentication for Dimplex Control."""
 
-    def __init__(self, session: aiohttp.ClientSession, token_data: dict | None = None):
+    def __init__(
+        self,
+        session: aiohttp.ClientSession,
+        token_data: dict[str, Any] | TokenBundle | None = None,
+        *,
+        on_token_update: TokenListener | None = None,
+    ):
         """Initialize the auth manager."""
         self._session = session
-        self._access_token: str | None = token_data.get("access_token") if token_data else None
-        self._refresh_token: str | None = token_data.get("refresh_token") if token_data else None
-        self._expires_at: float = token_data.get("expires_at", 0) if token_data else 0
+        self._on_token_update = on_token_update
+        bundle = token_data if isinstance(token_data, TokenBundle) else TokenBundle.from_mapping(token_data)
+        self._access_token: str | None = bundle.access_token
+        self._refresh_token: str | None = bundle.refresh_token
+        self._expires_at: float = bundle.expires_at
 
     @property
     def is_authenticated(self) -> bool:
         """Check if we have a valid access token."""
         return self._access_token is not None and time.time() < self._expires_at
+
+    def export_tokens(self) -> TokenBundle:
+        """Return the current token snapshot (safe for persistence)."""
+        return TokenBundle(
+            access_token=self._access_token,
+            refresh_token=self._refresh_token,
+            expires_at=self._expires_at,
+        )
+
+    def apply_tokens(self, bundle: TokenBundle | dict[str, Any]) -> None:
+        """Replace in-memory tokens from a :class:`TokenBundle` or dict."""
+        if not isinstance(bundle, TokenBundle):
+            bundle = TokenBundle.from_mapping(bundle)
+        self._access_token = bundle.access_token
+        self._refresh_token = bundle.refresh_token
+        self._expires_at = bundle.expires_at
 
     async def get_access_token(self) -> str:
         """Get a valid access token, refreshing if necessary."""
@@ -41,11 +100,14 @@ class AuthManager:
             raise DimplexAuthError("No refresh token available. User must authenticate first.")
 
         if self.is_authenticated:
-            return self._access_token  # type: ignore[return-value]
+            assert self._access_token is not None
+            return self._access_token
 
         # Token expired or missing, try refresh
         await self.refresh_tokens()
-        return self._access_token  # type: ignore[return-value]
+        if not self._access_token:
+            raise DimplexAuthError("Token refresh succeeded but no access token was returned.")
+        return self._access_token
 
     async def refresh_tokens(self) -> None:
         """Refresh the access token using the refresh token."""
@@ -67,12 +129,42 @@ class AuthManager:
             data = await resp.json()
             self._update_tokens(data)
 
-    def _update_tokens(self, data: dict) -> None:
+    def _update_tokens(self, data: dict[str, Any]) -> None:
         """Update internal token state from API response."""
         self._access_token = data.get("access_token")
-        self._refresh_token = data.get("refresh_token")
+        # Some refresh responses omit a new refresh token — keep the old one.
+        if data.get("refresh_token"):
+            self._refresh_token = data.get("refresh_token")
         expires_in = data.get("expires_in", 3600)
-        self._expires_at = time.time() + expires_in - 60  # Buffer 60s
+        self._expires_at = time.time() + float(expires_in) - 60  # Buffer 60s
+        if self._on_token_update is not None:
+            result = self._on_token_update(self.export_tokens())
+            if hasattr(result, "__await__"):
+                # Listener may be async; fire-and-forget is unsafe here — callers
+                # should prefer sync listeners or schedule from the callback.
+                pass
+
+    def save_tokens(self, file_path: str) -> None:
+        """Save current tokens to a JSON file."""
+        data = self.export_tokens().as_dict()
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        _LOGGER.info("Tokens saved to %s", file_path)
+
+    @classmethod
+    def load_tokens(cls, file_path: str) -> dict[str, Any] | None:
+        """Load tokens from a JSON file."""
+        if not os.path.exists(file_path):
+            return None
+        try:
+            with open(file_path, encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+            return None
+        except Exception as e:
+            _LOGGER.error("Failed to load tokens from %s: %s", file_path, e)
+            return None
 
     def get_login_url(self) -> str:
         """Generate the login URL for the user to visit."""
@@ -304,26 +396,3 @@ class AuthManager:
                         raise DimplexAuthError(f"Unexpected HTTP {resp.status} during redirect chain")
 
             raise DimplexAuthError("Exceeded maximum redirect hops without capturing auth code")
-
-    def save_tokens(self, file_path: str) -> None:
-        """Save current tokens to a JSON file."""
-        data = {
-            "access_token": self._access_token,
-            "refresh_token": self._refresh_token,
-            "expires_at": self._expires_at,
-        }
-        with open(file_path, "w") as f:
-            json.dump(data, f, indent=2)
-        _LOGGER.info("Tokens saved to %s", file_path)
-
-    @classmethod
-    def load_tokens(cls, file_path: str) -> dict | None:
-        """Load tokens from a JSON file."""
-        if not os.path.exists(file_path):
-            return None
-        try:
-            with open(file_path) as f:
-                return json.load(f)
-        except Exception as e:
-            _LOGGER.error("Failed to load tokens from %s: %s", file_path, e)
-            return None

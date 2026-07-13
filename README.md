@@ -150,24 +150,27 @@ await client.set_eco_start(hub_id, [appliance_id], True)
 # Enable Open Window Detection
 await client.set_open_window_detection(hub_id, [appliance_id], True)
 
-# Activate Boost (Mode 16, Status 1 = On)
-boost_settings = ApplianceModeSettings(ApplianceModes=16, Status=1, Temperature=25.0)
-await client.set_appliance_mode(hub_id, [appliance_id], boost_settings)
+# Activate Boost
+await client.set_boost(hub_id, [appliance_id], temperature=25.0, duration_minutes=60)
+
+# Set target temperature (rewrites timer period setpoints)
+await client.set_target_temperature(hub_id, appliance_id, 21.5)
 ```
 
 ### Energy reports
 
 ```python
-from dimplex_controller import parse_telemetry_points
+from dimplex_controller import parse_telemetry_points, summarise_energy
 
 report = await client.get_tsi_energy_report(hub_id)
-for appliance_id, telemetry in report.telemetry.items():
+for appliance_id, telemetry in report.ApplianceTelemetryData.items():
     points = parse_telemetry_points(telemetry)
-    for timestamp, value in points:
-        print(f"{appliance_id}: {value} kWh at {timestamp}")
+    daily = summarise_energy(points, mode="daily")
+    lifetime = summarise_energy(points, mode="lifetime")
+    print(f"{appliance_id}: today={daily.total_kwh} kWh, lifetime={lifetime.total_kwh} kWh")
 ```
 
-The `parse_telemetry_points` helper normalises arbitrary API response shapes (varying firmware formats) into `(timestamp, value)` tuples.
+`parse_telemetry_points` normalises firmware-varying point shapes. `summarise_energy` builds **daily** (local midnight) and **lifetime** totals. With `include_previous_period=True` the cloud often returns full history — filter client-side rather than trusting `days_back` alone.
 
 ## Configuration
 

@@ -330,3 +330,112 @@ async def test_get_tsi_energy_report_omits_hub_id_when_none(aresponses):
 
     assert "HubId" not in captured["body"]
     assert "EndDate" in captured["body"]
+
+
+@pytest.mark.asyncio
+async def test_set_boost(aresponses):
+    """Boost helper posts ApplianceModes=16 with duration in Time."""
+    captured: dict = {}
+
+    async def handler(request):
+        captured["body"] = await request.json()
+        return aresponses.Response(status=200, headers={"Content-Type": "application/json"}, body="{}")
+
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/RemoteControl/SetApplianceMode",
+        "POST",
+        handler,
+    )
+
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(session, refresh_token="fake_refresh")
+        client.auth._access_token = "fake_access"
+        client.auth._expires_at = 9999999999
+        await client.set_boost("hub-1", ["a-1"], temperature=24.0, duration_minutes=90)
+
+    assert captured["body"]["HubId"] == "hub-1"
+    assert captured["body"]["ApplianceIds"] == ["a-1"]
+    assert captured["body"]["Settings"]["ApplianceModes"] == 16
+    assert captured["body"]["Settings"]["Status"] == 1
+    assert captured["body"]["Settings"]["Temperature"] == 24.0
+    assert captured["body"]["Settings"]["Time"] == 90
+
+
+@pytest.mark.asyncio
+async def test_set_target_temperature_updates_periods(aresponses):
+    """Target temperature rewrites existing timer period temperatures."""
+    captured: dict = {}
+
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/RemoteControl/GetTimerModeDetailsForAppliance",
+        "POST",
+        aresponses.Response(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            body=(
+                '{"HubId":"hub-1","ApplianceId":"a-1","TimerMode":1,'
+                '"TimerPeriods":[{"DayOfWeek":1,"StartTime":"06:00:00",'
+                '"EndTime":"09:00:00","Temperature":18.0}]}'
+            ),
+        ),
+    )
+
+    async def set_handler(request):
+        captured["body"] = await request.json()
+        return aresponses.Response(status=200, headers={"Content-Type": "application/json"}, body="{}")
+
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/RemoteControl/SetTimerMode",
+        "POST",
+        set_handler,
+    )
+
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(session, refresh_token="fake_refresh")
+        client.auth._access_token = "fake_access"
+        client.auth._expires_at = 9999999999
+        await client.set_target_temperature("hub-1", "a-1", 21.5)
+
+    periods = captured["body"]["TimerModeSettings"]["TimerPeriods"]
+    assert len(periods) == 1
+    assert periods[0]["Temperature"] == 21.5
+    assert periods[0]["StartTime"] == "06:00:00"
+
+
+@pytest.mark.asyncio
+async def test_get_appliance_overview_empty_map(aresponses):
+    """Empty overview maps every requested id to None."""
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/RemoteControl/GetApplianceOverview",
+        "POST",
+        aresponses.Response(status=200, headers={"Content-Type": "application/json"}, body="[]"),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(session, refresh_token="fake_refresh")
+        client.auth._access_token = "fake_access"
+        client.auth._expires_at = 9999999999
+        result = await client.get_appliance_overview_map("hub-1", ["a-1", "a-2"])
+
+    assert result == {"a-1": None, "a-2": None}
+
+
+@pytest.mark.asyncio
+async def test_export_tokens():
+    """Public token export does not require private attribute access."""
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(
+            session,
+            refresh_token="r",
+            access_token="a",
+            expires_at=123.0,
+        )
+        bundle = client.export_tokens()
+        assert bundle.access_token == "a"
+        assert bundle.refresh_token == "r"
+        assert bundle.expires_at == 123.0
+        assert bundle.as_dict()["refresh_token"] == "r"
