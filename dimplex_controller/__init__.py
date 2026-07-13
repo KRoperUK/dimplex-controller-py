@@ -2,7 +2,16 @@
 
 from .auth import TokenBundle
 from .client import DimplexControl
-from .exceptions import DimplexApiError, DimplexAuthError, DimplexConnectionError, DimplexError
+from .exceptions import (
+    DimplexApiError,
+    DimplexAuthError,
+    DimplexAuthInvalidCredentialsError,
+    DimplexAuthInvalidGrantError,
+    DimplexAuthParseError,
+    DimplexAuthTransientError,
+    DimplexConnectionError,
+    DimplexError,
+)
 from .models import (
     Appliance,
     ApplianceModeFlag,
@@ -48,5 +57,9 @@ __all__ = [
     "DimplexError",
     "DimplexApiError",
     "DimplexAuthError",
+    "DimplexAuthInvalidGrantError",
+    "DimplexAuthInvalidCredentialsError",
+    "DimplexAuthParseError",
+    "DimplexAuthTransientError",
     "DimplexConnectionError",
 ]
