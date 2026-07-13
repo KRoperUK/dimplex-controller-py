@@ -9,6 +9,7 @@ from typing import Any
 import aiohttp
 
 from .auth import AuthManager, TokenBundle
+from .capabilities import ApplianceCapabilities, capabilities_for
 from .const import (
     BASE_URL,
     HEADER_APP_NAME,
@@ -22,6 +23,7 @@ from .const import (
 )
 from .exceptions import DimplexApiError, DimplexConnectionError
 from .models import (
+    Appliance,
     ApplianceModeFlag,
     ApplianceModeSettings,
     ApplianceStatus,
@@ -222,6 +224,16 @@ class DimplexControl:
         if isinstance(last_error, DimplexConnectionError):
             raise last_error
         raise DimplexConnectionError("Request failed after retries")
+
+    @staticmethod
+    def capabilities_for(
+        appliance: Appliance | None = None,
+        *,
+        status: ApplianceStatus | None = None,
+        product: ProductModel | None = None,
+    ) -> ApplianceCapabilities:
+        """Return a capability matrix for an appliance (see :mod:`.capabilities`)."""
+        return capabilities_for(appliance, status=status, product=product)
 
     async def get_hubs(self) -> list[Hub]:
         """Get all hubs for the user."""
