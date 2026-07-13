@@ -309,12 +309,23 @@ class AuthManager:
 
         Uses direct HTTP credential submission so users don't need to
         manually extract auth codes from browser network traffic.
+
+        A separate :class:`aiohttp.ClientSession` is used because the B2C
+        flow requires a dedicated cookie jar for state tracking across
+        redirects (using the shared session would pollute its cookies).
+        The session inherits the caller's **connector** (TLS/proxy config)
+        and the configured timeout so network behaviour is consistent.
         """
         jar = aiohttp.CookieJar(unsafe=True)
         start_url = self.get_login_url()
+        # Inherit the caller's connector (TLS cert, proxy, DNS resolver) so
+        # headless login respects the same network configuration as API calls.
+        connector = self._session.connector
 
         try:
-            async with aiohttp.ClientSession(cookie_jar=jar, timeout=self._timeout) as session:
+            async with aiohttp.ClientSession(
+                cookie_jar=jar, timeout=self._timeout, connector=connector, connector_owner=False
+            ) as session:
                 # Step 1: GET the auth URI, follow redirects to B2C login page
                 _LOGGER.debug("Fetching B2C login page")
                 try:
@@ -374,6 +385,9 @@ class AuthManager:
                 # re-injected with quoted values on the next request.
                 async with aiohttp.ClientSession(
                     cookie_jar=aiohttp.DummyCookieJar(),
+                    timeout=self._timeout,
+                    connector=connector,
+                    connector_owner=False,
                 ) as raw_session:
                     try:
                         async with raw_session.post(

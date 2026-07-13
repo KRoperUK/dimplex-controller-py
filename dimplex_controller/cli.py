@@ -18,6 +18,7 @@ import contextlib
 import json
 import os
 import sys
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,8 @@ import aiohttp
 from .auth import TokenBundle
 from .client import DimplexControl
 from .exceptions import DimplexError
+
+_CoroFactory = Callable[[DimplexControl], Awaitable[int]]
 
 
 def _load_tokens(path: Path | None) -> TokenBundle:
@@ -57,7 +60,7 @@ def _redact(value: str | None, *, show: bool) -> str:
 
 async def _with_client(
     args: argparse.Namespace,
-    coro_factory: Any,
+    coro_factory: _CoroFactory,
 ) -> int:
     tokens = _load_tokens(Path(args.tokens_file) if args.tokens_file else None)
     if not tokens.refresh_token and not tokens.access_token:
@@ -257,7 +260,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     async def run(client: DimplexControl) -> int:
-        return await args.func(client, args)
+        func: Callable[..., Awaitable[int]] = args.func
+        return await func(client, args)
 
     return asyncio.run(_with_client(args, run))
 

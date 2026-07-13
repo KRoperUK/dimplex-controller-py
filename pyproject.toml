@@ -52,13 +52,14 @@ select = ["E", "F", "I", "W", "UP", "B", "SIM"]
 ignore = ["E501"]
 
 [tool.mypy]
-# Loose by design — the library is mostly untyped and a strict pass is out of
-# scope for the CI modernisation. The two auth.py return-narrowing issues and
-# the client.py expires_at assignment are pre-existing and either fixed in
-# place or # type: ignore-d; remove when a full typing pass lands.
 python_version = "3.10"
 files = ["dimplex_controller"]
 ignore_missing_imports = true
+# Incrementally strict — these catch real bugs without requiring a full rewrite.
+disallow_untyped_defs = true
+warn_return_any = true
+warn_unused_configs = true
+warn_redundant_casts = true
 
 [tool.pytest.ini_options]
 # All async tests use asyncio; "auto" means new tests don't each need the
