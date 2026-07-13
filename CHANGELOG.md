@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.9.0...v0.10.0) (2026-07-13)
+
+
+### Features
+
+* add dimplex CLI for hubs, status, energy, control ([520219c](https://github.com/KRoperUK/dimplex-controller-py/commit/520219c718d3ff726b7195fc932483691837b1a2)), closes [#48](https://github.com/KRoperUK/dimplex-controller-py/issues/48)
+* appliance capability matrix ([#55](https://github.com/KRoperUK/dimplex-controller-py/issues/55)) ([e2b0bf7](https://github.com/KRoperUK/dimplex-controller-py/commit/e2b0bf717c0ebbcc67325bc7b966b74b8014bc13))
+* centralized HTTP retry with backoff for idempotent GETs ([2711950](https://github.com/KRoperUK/dimplex-controller-py/commit/2711950bed05378f09fae064a75c84aec4c054da)), closes [#49](https://github.com/KRoperUK/dimplex-controller-py/issues/49)
+* dimplex CLI for smoke tests ([#59](https://github.com/KRoperUK/dimplex-controller-py/issues/59)) ([520219c](https://github.com/KRoperUK/dimplex-controller-py/commit/520219c718d3ff726b7195fc932483691837b1a2))
+* HTTP retry and rate-limit backoff ([#57](https://github.com/KRoperUK/dimplex-controller-py/issues/57)) ([2711950](https://github.com/KRoperUK/dimplex-controller-py/commit/2711950bed05378f09fae064a75c84aec4c054da))
+* safe schedule read/write helpers for timer periods ([b373360](https://github.com/KRoperUK/dimplex-controller-py/commit/b3733607143270bb4874d6a0e94626864baaac2b)), closes [#50](https://github.com/KRoperUK/dimplex-controller-py/issues/50)
+* schedule helpers for timer periods ([#58](https://github.com/KRoperUK/dimplex-controller-py/issues/58)) ([b373360](https://github.com/KRoperUK/dimplex-controller-py/commit/b3733607143270bb4874d6a0e94626864baaac2b))
+
+
+### Bug Fixes
+
+* keep T1 and T2 energy registers separate ([#62](https://github.com/KRoperUK/dimplex-controller-py/issues/62)) ([d5436f4](https://github.com/KRoperUK/dimplex-controller-py/commit/d5436f4d877a31e4e906b5004e7c3fa6859ffcf9))
+
+
+### Documentation
+
+* compatibility matrix and power/setback research ([#61](https://github.com/KRoperUK/dimplex-controller-py/issues/61)) ([8aec41d](https://github.com/KRoperUK/dimplex-controller-py/commit/8aec41d7c76b030a9f923ad52eb4952945aee4ac))
+* HA compatibility matrix and power/setback research notes ([8aec41d](https://github.com/KRoperUK/dimplex-controller-py/commit/8aec41d7c76b030a9f923ad52eb4952945aee4ac)), closes [#54](https://github.com/KRoperUK/dimplex-controller-py/issues/54)
+
 ## [0.9.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.8.0...v0.9.0) (2026-07-13)
 
 
