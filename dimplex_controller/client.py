@@ -9,6 +9,7 @@ from typing import Any
 import aiohttp
 
 from .auth import AuthManager, TokenBundle
+from .capabilities import ApplianceCapabilities, capabilities_for
 from .const import (
     BASE_URL,
     HEADER_APP_NAME,
@@ -21,7 +22,6 @@ from .const import (
     HTTP_OK,
 )
 from .exceptions import DimplexApiError, DimplexConnectionError
-from .capabilities import ApplianceCapabilities, capabilities_for
 from .models import (
     Appliance,
     ApplianceModeFlag,
