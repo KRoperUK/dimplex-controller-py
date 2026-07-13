@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.6.1...v0.7.0) (2026-07-13)
+
+
+### Features
+
+* energy summaries, control helpers, and public token surface ([#41](https://github.com/KRoperUK/dimplex-controller-py/issues/41)) ([9b56840](https://github.com/KRoperUK/dimplex-controller-py/commit/9b56840ce0e5c42555435e33de64cf4e003e20ea))
+
 ## [0.6.1](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.6.0...v0.6.1) (2026-07-12)
 
 
