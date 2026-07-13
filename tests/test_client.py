@@ -467,6 +467,115 @@ async def test_get_product_models(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_get_retries_on_503_then_succeeds(aresponses):
+    """Idempotent GET retries on 503 and returns the successful body."""
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/Hubs/GetUserHubs",
+        "GET",
+        aresponses.Response(status=503, headers={"Content-Type": "text/plain"}, body="busy"),
+    )
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/Hubs/GetUserHubs",
+        "GET",
+        aresponses.Response(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            body='[{"HubId": "123", "HubName": "Test Hub"}]',
+        ),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(
+            session,
+            refresh_token="fake_refresh",
+            max_retries=2,
+            retry_base_delay=0.01,
+            retry_max_delay=0.02,
+        )
+        client.auth._access_token = "fake_access"
+        client.auth._expires_at = 9999999999
+        hubs = await client.get_hubs()
+
+    assert len(hubs) == 1
+    assert hubs[0].HubId == "123"
+
+
+@pytest.mark.asyncio
+async def test_post_does_not_retry_by_default(aresponses):
+    """Control POSTs fail immediately on 503 without a second attempt."""
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        return aresponses.Response(status=503, headers={"Content-Type": "text/plain"}, body="busy")
+
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/RemoteControl/SetEcoStart",
+        "POST",
+        handler,
+    )
+
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(
+            session,
+            refresh_token="fake_refresh",
+            max_retries=3,
+            retry_base_delay=0.01,
+        )
+        client.auth._access_token = "fake_access"
+        client.auth._expires_at = 9999999999
+        with pytest.raises(DimplexApiError) as exc:
+            await client.set_eco_start("hub-1", ["a-1"], True)
+
+    assert exc.value.status == 503
+    assert calls["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_honours_retry_after(aresponses, monkeypatch):
+    """Retry-After header is preferred over exponential backoff."""
+    slept: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        slept.append(delay)
+
+    monkeypatch.setattr("dimplex_controller.client.asyncio.sleep", fake_sleep)
+
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/Hubs/GetUserHubs",
+        "GET",
+        aresponses.Response(
+            status=429,
+            headers={"Content-Type": "text/plain", "Retry-After": "0.05"},
+            body="rate limited",
+        ),
+    )
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/Hubs/GetUserHubs",
+        "GET",
+        aresponses.Response(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            body="[]",
+        ),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(session, refresh_token="fake_refresh", max_retries=1)
+        client.auth._access_token = "fake_access"
+        client.auth._expires_at = 9999999999
+        hubs = await client.get_hubs()
+
+    assert hubs == []
+    assert slept == [0.05]
+
+
+@pytest.mark.asyncio
 async def test_set_period_setpoint_only_touches_matched_period(aresponses):
     """set_period_setpoint updates one period and preserves siblings."""
     get_body = {
