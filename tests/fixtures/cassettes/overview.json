@@ -1,0 +1,15 @@
+[
+  {
+    "HubId": "hub-demo-001",
+    "ApplianceId": "app-1",
+    "ZoneId": "zone-1",
+    "RoomTemperature": 21.5,
+    "ActiveSetPointTemperature": 21.0,
+    "NormalTemperature": 21.0,
+    "ApplianceModes": 0,
+    "OpenWindowEnabled": true,
+    "EcoStartEnabled": false,
+    "ComfortStatus": false,
+    "SetbackEnabled": false
+  }
+]

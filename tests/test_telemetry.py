@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from dimplex_controller.telemetry import VALUE_KEY_T2, parse_telemetry_points
+from dimplex_controller.telemetry import VALUE_KEY_T1, VALUE_KEY_T2, parse_telemetry_points
 
 
 def test_empty_and_bad_input():
@@ -147,14 +147,27 @@ def test_t2_energy_register():
     ]
 
 
-def test_t2_only_points():
-    """When only ``T2`` is present, default parsing falls back to it."""
+def test_t1_ignores_t2_when_both_present():
+    """Primary parse must not pick T2 when T1 is present (no mixing)."""
     out = parse_telemetry_points(
         [
-            {"TS": 1767225600, "T2": 0.36},
-        ]
+            {"TS": 1767225600, "T1": 7.46, "T2": 0.36},
+            {"TS": 1767312000, "T1": 8.02, "T2": 0.18},
+        ],
+        value_keys=VALUE_KEY_T1,
     )
-    assert out == [(datetime(2026, 1, 1, tzinfo=timezone.utc), 0.36)]
+    assert out == [
+        (datetime(2026, 1, 1, tzinfo=timezone.utc), 7.46),
+        (datetime(2026, 1, 2, tzinfo=timezone.utc), 8.02),
+    ]
+
+
+def test_t2_only_points_not_in_primary_parse():
+    """T2-only payloads must not bleed into the primary (T1) series."""
+    out_t1 = parse_telemetry_points([{"TS": 1767225600, "T2": 0.36}])
+    assert out_t1 == []
+    out_t2 = parse_telemetry_points([{"TS": 1767225600, "T2": 0.36}], value_keys=VALUE_KEY_T2)
+    assert out_t2 == [(datetime(2026, 1, 1, tzinfo=timezone.utc), 0.36)]
 
 
 def test_summarise_lifetime():
