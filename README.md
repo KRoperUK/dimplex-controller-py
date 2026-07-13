@@ -139,6 +139,8 @@ for status in status_list:
     print(f"Comfort status: {status.ComfortStatus}")
 ```
 
+> **A note on empty responses:** when every requested appliance is offline (e.g. radiators switched off at the wall) the cloud returns HTTP 200 with an empty list. `get_appliance_overview` surfaces that as `[]` — it is **not** an error. If you need a stable id → status mapping, use `get_appliance_overview_map(...)`, which fills in `None` for missing ids.
+
 ### Sending control commands
 
 ```python
@@ -252,6 +254,10 @@ If `parse_telemetry_points` returns an empty list, the API likely returned an un
 ### Rate limiting
 
 The GDHV cloud API has rate limits. If you hit them, back off for a few minutes before retrying. The library does not currently implement automatic retries with back-off.
+
+### `get_appliance_overview` returns an empty list
+
+This is the cloud's normal response when every requested appliance is offline (e.g. radiators turned off at the wall, or a hub that has dropped off the network). It is **not** an error — `get_appliance_overview` returns `[]` and `get_appliance_overview_map` returns a dict of `None` values. Treat the call as a successful poll; the appliances will reappear in subsequent calls once they come back online. See the note in [Reading status](#reading-status) for details.
 
 
 ## CLI

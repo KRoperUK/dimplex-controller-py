@@ -406,6 +406,30 @@ async def test_set_target_temperature_updates_periods(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_get_appliance_overview_empty_list(aresponses):
+    """Empty overview returns an empty list — not an error.
+
+    Regression for dimplex-controller-py#66. The cloud returns HTTP 200 with
+    an empty body when every requested appliance is offline; the client must
+    surface that as a successful empty list, not raise.
+    """
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/RemoteControl/GetApplianceOverview",
+        "POST",
+        aresponses.Response(status=200, headers={"Content-Type": "application/json"}, body="[]"),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(session, refresh_token="fake_refresh")
+        client.auth._access_token = "fake_access"
+        client.auth._expires_at = 9999999999
+        statuses = await client.get_appliance_overview("hub-1", ["a-1", "a-2"])
+
+    assert statuses == []
+
+
+@pytest.mark.asyncio
 async def test_get_appliance_overview_empty_map(aresponses):
     """Empty overview maps every requested id to None."""
     aresponses.add(
