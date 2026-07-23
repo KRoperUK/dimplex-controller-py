@@ -310,7 +310,7 @@ def test_hub_with_connection_state():
     hub = Hub(
         HubId="h1",
         HubName="Home",
-        FriendlyName="7 Tadmore Close",
+        FriendlyName="7 Example Close",
         ConnectionState=1,
         FirmwareVersion="129.12.5",
         NumberOfZones=3,
@@ -319,7 +319,7 @@ def test_hub_with_connection_state():
         LastTelemDate="2026-06-12T09:45:34.89Z",
     )
     assert hub.Name == "Home"
-    assert hub.FriendlyName == "7 Tadmore Close"
+    assert hub.FriendlyName == "7 Example Close"
     assert hub.ConnectionState == 1
     assert hub.FirmwareVersion == "129.12.5"
     assert hub.NumberOfZones == 3
