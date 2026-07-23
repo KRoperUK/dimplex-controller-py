@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.1](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.12.0...v0.12.1) (2026-07-23)
+
+
+### Bug Fixes
+
+* remove PII from test fixtures ([d533544](https://github.com/KRoperUK/dimplex-controller-py/commit/d5335446c5e775f1b17619d0521058b649c767e9))
+
+
+### Documentation
+
+* normalise README badges on shields.io ([#86](https://github.com/KRoperUK/dimplex-controller-py/issues/86)) ([d8a7bd1](https://github.com/KRoperUK/dimplex-controller-py/commit/d8a7bd10d21de6fe551008621a9b9339681e861a))
+
 ## [0.12.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.11.0...v0.12.0) (2026-07-13)
 
 
