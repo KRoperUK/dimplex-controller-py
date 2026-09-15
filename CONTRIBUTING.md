@@ -1,5 +1,15 @@
 # Contribution guidelines
 
+> **This is an unofficial project.** It is not affiliated with, endorsed by, or supported by
+> Dimplex, Glen Dimplex Heating & Ventilation, or the Glen Dimplex Group. The protocol was
+> recovered by reverse-engineering the official Dimplex Control app. No Dimplex code is
+> included or redistributed.
+>
+> Contributions must respect that boundary: describe behaviour observed from the official app
+> or from your own hardware, and cite decompiled findings as notes — but do not commit
+> decompiled Dimplex source, proprietary assets, APK binaries, or credentials to this
+> repository.
+
 Contributing to this project should be as easy and transparent as possible.
 
 ## Development setup

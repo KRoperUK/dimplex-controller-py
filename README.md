@@ -13,13 +13,23 @@
 
 ---
 
+> [!IMPORTANT]
+> **Unofficial library.** Not affiliated with, endorsed by, or supported by Dimplex, Glen
+> Dimplex Heating & Ventilation (GDHV), or the Glen Dimplex Group. This is an independent
+> project built by **reverse-engineering** the official Dimplex Control Android app and the
+> private cloud API it talks to.
+>
+> There is no public or documented API. Dimplex can change or withdraw that API at any time
+> and without notice, which may break this library. Use it at your own risk.
+>
+> No Dimplex code is included or redistributed. "Dimplex", "Quantum", "QRAD" and related
+> marks belong to their respective owners and are used here only to describe compatibility.
+
 ## What does this do?
 
 `dimplex-controller-py` is an asynchronous Python client that talks to the GDHV IoT cloud platform. It handles Azure B2C authentication (including automatic token refresh), discovers your Hubs, Zones and Appliances, and lets you read telemetry and send control commands — all from a script or a larger application.
 
 It is the engine behind the [Dimplex Hub Home Assistant integration](https://github.com/KRoperUK/dimplex-controller-hass) and is published to PyPI as [`dimplex-controller`](https://pypi.org/project/dimplex-controller/).
-
-> **Note:** This is an unofficial library and is not affiliated with or endorsed by Glen Dimplex Heating & Ventilation (GDHV). Use it at your own risk.
 
 ## Contents
 
