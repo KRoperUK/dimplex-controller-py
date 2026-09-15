@@ -1,0 +1,46 @@
+name: Feature request
+description: Suggest a new capability for the library
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: A clear description of the use case or limitation you have hit.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What you would like the library to expose, and roughly how.
+    validations:
+      required: false
+  - type: textarea
+    id: evidence
+    attributes:
+      label: What is the basis for the request?
+      description: >-
+        This library only implements what the official Dimplex Control app does, so the
+        most valuable thing you can add here is evidence: a capture of the app making the
+        request, a decompiled method name, or a description of the app's own UI for the
+        feature. Requests for behaviour the app does not have cannot be implemented.
+    validations:
+      required: false
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware / setup details
+      description: Hub model, appliance models, and what firmware or app version you saw this on.
+    validations:
+      required: false
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to help test an implementation.
+        - label: >-
+            I have hardware in an untested family (hot water cylinder, heat pump) and can
+            try things against it.
+        - label: I am willing to submit a pull request.
