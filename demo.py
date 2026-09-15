@@ -144,10 +144,10 @@ async def main():
                         # print("\n  Example: Toggling EcoStart for the first appliance...")
                         # await client.set_eco_start(hub.HubId, [appliance_ids[0]], True)
 
-                        # Example of Boost (ApplianceMode 16)
-                        # from dimplex_controller.models import ApplianceModeSettings
-                        # boost = ApplianceModeSettings(ApplianceModes=16, Status=1, Temperature=25.0)
-                        # await client.set_appliance_mode(hub.HubId, [appliance_ids[0]], boost)
+                        # Example of Boost — EApplianceModes.Boost is 2 (16 is Advance)
+                        # await client.set_boost(
+                        #     hub.HubId, [appliance_ids[0]], temperature=25.0, duration_minutes=60
+                        # )
 
                     except Exception as e:
                         print(f"    (Could not fetch or interact with overview: {e})")

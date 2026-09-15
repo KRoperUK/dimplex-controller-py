@@ -67,19 +67,47 @@ DimplexControl(
 
 ### Methods — write
 
+Mode writes go through `POST /RemoteControl/SetApplianceMode` with one
+`EApplianceModes` bit targeted at a time. See
+[`decompiled-api-reference.md`](decompiled-api-reference.md) for the ground-truth
+payload shapes.
+
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `set_mode(hub_id, appliance_id, mode)` | `None` | Change the timer/operation mode (see `TimerMode`). |
-| `set_target_temperature(hub_id, appliance_id, temp)` | `None` | Rewrite all timer period setpoints (or install a full-week schedule). |
+| `set_appliance_setpoint_temperature(hub_id, appliance_ids, temperature)` | `None` | **Preferred setpoint path.** Dedicated endpoint; applies immediately and leaves the schedule untouched. |
+| `set_boost(hub_id, appliance_ids, *, temperature=21.0, duration_minutes=60, enable=True)` | `None` | Timed Boost (`ApplianceModes=2`, `Time` = minutes). |
+| `clear_boost(hub_id, appliance_ids, *, temperature=21.0)` | `None` | Disable Boost (convenience wrapper). |
+| `set_away(hub_id, appliance_ids, *, temperature=7.0, enable=True, until=None, number_of_days=0)` | `None` | Away setback (`ApplianceModes=4`). `until` is the away-until datetime sent in `Date`; 7–30 °C, defaults to the 7 °C anti-freeze floor. |
+| `clear_away(hub_id, appliance_ids, *, temperature=7.0)` | `None` | Disable Away (convenience wrapper). |
+| `set_frost_protect(hub_id, appliance_ids, *, enable=True, temperature=7.0)` | `None` | Engage/clear frost protection (`ApplianceModes=32`). |
+| `turn_off(hub_id, appliance_ids)` | `None` | Turn off the way the app does — frost protection at 7 °C. |
+| `set_advance(hub_id, appliance_ids, *, enable=True, temperature=None)` | `None` | Advance to the next schedule period (`ApplianceModes=16`); sends the `255` sentinel when no temperature is given. |
+| `set_manual(hub_id, appliance_ids, *, temperature, enable=True)` | `None` | Hold a manual setpoint (`ApplianceModes=128`). |
+| `set_eco_mode(hub_id, appliance_ids, *, temperature, enable=True)` | `None` | Engage Eco mode (`ApplianceModes=64`). Not the same as `set_eco_start`. |
+| `set_setback_temperature(hub_id, appliance_ids, *, temperature, status=SetbackStatus.ACTIVE)` | `None` | Write the setback temperature. **Untested.** |
+| `set_eco_start(hub_id, appliance_ids, enable)` | `None` | Toggle the EcoStart pre-heat setting. |
+| `set_open_window_detection(hub_id, appliance_ids, enable)` | `None` | Toggle Open Window Detection. |
 | `set_period_setpoint(hub_id, appliance_id, *, day_of_week, start_time, temperature, end_time=None)` | `TimerModeSettings` | Update one timer period's setpoint without clobbering others. |
 | `update_period(hub_id, appliance_id, period, *, match_start_time=None)` | `TimerModeSettings` | Replace one timer period matched by day + start time. |
-| `set_boost(hub_id, appliance_ids, *, temperature, duration_minutes=60, enable=True)` | `None` | Enable or disable Boost. |
-| `clear_boost(hub_id, appliance_ids, *, temperature=21.0)` | `None` | Disable Boost (convenience wrapper). |
-| `set_away(hub_id, appliance_ids, *, temperature, enable=True, number_of_days=0)` | `None` | Enable or disable Away mode. |
-| `clear_away(hub_id, appliance_ids, *, temperature=16.0)` | `None` | Disable Away mode (convenience wrapper). |
-| `set_eco_start(hub_id, appliance_ids, enable)` | `None` | Toggle EcoStart. |
-| `set_open_window_detection(hub_id, appliance_ids, enable)` | `None` | Toggle Open Window Detection. |
-| `set_appliance_mode(hub_id, appliance_ids, mode_settings)` | `None` | Low-level: send a full `ApplianceModeSettings` payload. |
+| `copy_schedule_to_appliances(hub_id, from_appliance_id, appliance_ids, *, timer_mode=0)` | `None` | Copy one appliance's schedule onto others. |
+| `set_mode(hub_id, appliance_id, mode)` | `None` | Rewrite `TimerMode` via the schedule editor. **Quantum returns HTTP 403** — use `turn_off` / `set_appliance_setpoint_temperature` instead. |
+| `set_target_temperature(hub_id, appliance_id, temp)` | `None` | **Deprecated.** Rewrites all period setpoints via `SetTimerMode`; 403 on Quantum. |
+| `set_mode_flag(hub_id, appliance_ids, mode, *, enable=True, temperature=None, minutes=0, until=None, ...)` | `None` | Low-level: engage/clear any single mode bit. |
+| `set_appliance_mode(hub_id, appliance_ids, mode_settings)` | `None` | Lowest-level: send a full `ApplianceModeSettings` payload. |
+
+### Methods — hot-water cylinders
+
+All confirmed present in APK 2.26.0 but **untested** — no cylinder hardware is
+available. `heat_pump=True` targets an ASHW (heat-pump) cylinder.
+
+| Method | Description |
+|--------|-------------|
+| `set_hot_water_mode(hub_id, appliance_ids, mode, *, enable=True, temperature=None, heat_pump=False)` | Set a cylinder mode. |
+| `set_hot_water_boost_temperature(hub_id, appliance_ids, temperature, *, enable=True)` | Cylinder Boost temperature. |
+| `set_hot_water_normal_temperature(hub_id, appliance_ids, temperature, *, enable=True)` | Cylinder Normal temperature. |
+| `set_hot_water_hygiene(hub_id, appliance_ids, *, temperature, frequency=HygieneFrequency.WEEKLY, enable=True, heat_pump=False)` | Anti-legionella cycle. |
+| `get_heat_pump_hot_water_schedule(hub_id, appliance_id)` | Read an ASHW cylinder's schedule. |
+| `set_heat_pump_hot_water_schedule(settings)` | Write an ASHW cylinder's schedule periods. |
 
 ### Static methods
 
@@ -174,19 +202,36 @@ Frozen dataclass for serialising auth tokens.
 | `ErrorCode` | `str \| None` | Current fault code. |
 | `WarningCode` | `str \| None` | Current warning code. |
 
-Helper properties: `mode_flags` → `ApplianceModeFlag`, `is_boost_active` → `bool`, `is_away_active` → `bool`.
+Helper properties:
+
+| Property | Returns | Description |
+|----------|---------|-------------|
+| `mode_flags` | `ApplianceModeFlag` | `ApplianceModes` as a typed flag set. |
+| `has_mode(mode)` | `bool` | True when every bit in `mode` is engaged. |
+| `active_modes` | `list[str]` | Names of the engaged mode bits. |
+| `active_setpoint_temperature` | `float \| None` | `ActiveSetPointTemperature` with the `255` "no setpoint" sentinel removed. |
+| `is_boost_active` | `bool` | Boost bit engaged. |
+| `is_away_active` | `bool` | Away bit engaged. |
+| `is_frost_protect_active` | `bool` | Frost protection engaged (the app's "off"). |
+| `is_advance_active` | `bool` | Advanced to the next schedule period. |
+| `is_timer_active` | `bool` | Following the schedule. |
+| `is_manual_active` | `bool` | Held at a manual setpoint. |
+| `is_eco_active` | `bool` | Eco *mode* bit engaged (≠ `EcoStartEnabled`). |
 
 ### `ApplianceModeSettings`
 
-Payload for `set_appliance_mode`.
+Payload for `set_appliance_mode` / every `SetApplianceMode*` endpoint.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `ApplianceModes` | `int` | — | Bitmask (`16` = Boost, `32` = Away). |
-| `Status` | `int` | — | `1` = on, `0` = off. |
-| `Temperature` | `float` | `23.0` | Target temperature. |
-| `Time` | `int` | `0` | Duration (Boost minutes). |
-| `NumberOfDays` | `int` | `0` | Away days. |
+| `ApplianceModes` | `int` | — | Which mode the write targets (see `ApplianceModeFlag`). |
+| `Status` | `int` | — | `1` engages the mode, `0` clears it. |
+| `Temperature` | `int` | `23` | Target °C. Wire type is a short, so floats are rounded to whole degrees. |
+| `Time` | `int` | `0` | Boost duration in minutes. |
+| `Date` | `str` | `"0001-01-01T00:00:00"` | Away "away until" datetime — how the app expresses Away duration. |
+| `StatusTwo` | `int` | `0` | Schedule profile (see `ScheduleProfile`). |
+| `NumberOfDays` | `int` | `0` | Legacy Away duration; prefer `Date`. |
+| `Frequency` | `int` | `0` | Hot-water hygiene cycle (see `HygieneFrequency`). |
 
 ### `TimerPeriod`
 
@@ -208,20 +253,72 @@ Payload for `set_appliance_mode`.
 
 ### `TimerMode` (IntEnum)
 
+Values for `TimerModeSettings.TimerMode`.
+
 | Value | Name |
 |-------|------|
-| `0` | `OFF` |
+| `0` | `USER_TIMER` |
 | `1` | `MANUAL` |
-| `2` | `TIMER` |
-| `3` | `FROST_PROTECTION` |
+| `2` | `FROST_PROTECTION` |
+| `3` | `OFF` |
 
 ### `ApplianceModeFlag` (IntFlag)
 
-| Value | Name |
-|-------|------|
-| `0` | `NONE` |
-| `16` | `BOOST` |
-| `32` | `AWAY` |
+`EApplianceModes`, as decompiled from Dimplex Control APK 2.26.0.
+
+| Value | Name | Notes |
+|-------|------|-------|
+| `0` | `NONE` | |
+| `1` | `TIMER_MODE` | Following the schedule. |
+| `2` | `BOOST` | `Time` = duration in minutes. |
+| `4` | `AWAY` | `Date` = away-until; temperature 7–30, defaults 7. |
+| `8` | `HOLIDAY` | |
+| `16` | `ADVANCE` | Jump to the next period; `255` on Quantum / Storage Heater. |
+| `32` | `FROST_PROTECT` | Fixed 7 °C — how the app turns a heater off. |
+| `64` | `ECO` | |
+| `128` | `MANUAL` | |
+| `256` | `HYGIENE` | Hot-water cylinders. |
+| `512` | `STANDALONE` | |
+| `1024` | `SAFE_MODE` | |
+| `2048` | `SHUTDOWN` | |
+| `4096` | `COMMS` | |
+| `8192` | `NORMAL` | Hot-water cylinders. |
+| `16384` | `STANDBY` | |
+
+> Releases before 0.13.0 defined `BOOST = 16` and `AWAY = 32` — those are in fact
+> `ADVANCE` and `FROST_PROTECT`. Callers that hard-coded 16/32 were commanding
+> the wrong mode.
+
+### `ApplianceModeStatus` (IntEnum)
+
+`ApplianceModeSettings.Status`: `INACTIVE = 0`, `ACTIVE = 1`.
+
+### `SetbackStatus` (IntEnum)
+
+`EStatus`, for `set_setback_temperature`: `INACTIVE = 0`, `ACTIVE = 1`,
+`DSM_MODE = 2`, `LOCAL_FREQUENCY_CONTROL_ACTIVE = 3`.
+
+### `ScheduleProfile` (IntEnum)
+
+`EStatusTwo`: `USER_TIMER = 0`, `HOME_ALL_DAY = 1`, `OUT_ALL_DAY = 2`.
+
+### `HygieneFrequency` (IntEnum)
+
+`EFrequency`: `OFF = 0`, `DAILY = 1`, `WEEKLY = 7`, `MONTHLY = 28`.
+
+### Temperature constants
+
+```python
+from dimplex_controller import (
+    MODE_TEMP_MIN,             # 7.0  — mode carousel floor
+    MODE_TEMP_MAX,             # 30.0 — mode carousel ceiling
+    FROST_TEMPERATURE,         # 7.0
+    DEFAULT_AWAY_TEMPERATURE,  # 7.0
+    DEFAULT_BOOST_TEMPERATURE, # 21.0
+    NO_SETPOINT_SENTINEL,      # 255  — "following the schedule"
+    NULL_DATETIME,             # "0001-01-01T00:00:00"
+)
+```
 
 ### `UserContext`
 

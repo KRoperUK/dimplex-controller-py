@@ -2,7 +2,16 @@ openapi: 3.0.0
 info:
   title: Dimplex Controller API
   version: 1.0.0
-  description: API for controlling Dimplex heating devices via the GDHV IoT platform.
+  description: |
+    API for controlling Dimplex heating devices via the GDHV IoT platform.
+
+    Request/response shapes and enum values are cross-referenced against the
+    decompiled official **Dimplex Control** Android app (APK 2.26.0,
+    .NET MAUI). See `docs/decompiled-api-reference.md` for provenance and for
+    which behaviours are additionally validated on live hardware.
+
+    Endpoints marked **untested** are confirmed present in the app but have
+    not been exercised against real hardware.
 
 servers:
   - url: https://mobileapi.gdhv-iot.com/api
@@ -14,6 +23,26 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+
+  requestBodies:
+    ApplianceModeRequest:
+      required: true
+      description: |
+        `SetApplianceModeRequest` — the shared body of every `SetApplianceMode*`
+        endpoint.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              Settings:
+                $ref: "#/components/schemas/ApplianceModeSettings"
+              HubId:
+                type: string
+              ApplianceIds:
+                type: array
+                items:
+                  type: string
 
   schemas:
     Hub:
@@ -101,11 +130,15 @@ components:
         StatusTwo:
           type: integer
         ApplianceModes:
-          type: integer
+          $ref: "#/components/schemas/EApplianceModes"
         RoomTemperature:
           type: number
         ActiveSetPointTemperature:
           type: number
+          description: |
+            Currently applied setpoint in °C, or `255` (0xFF) when there is no
+            explicit setpoint and the appliance is following its schedule.
+            Clients must filter 255 rather than presenting it as a temperature.
         NormalTemperature:
           type: number
         AwayDateTime:
@@ -140,23 +173,83 @@ components:
 
     ApplianceModeSettings:
       type: object
+      description: |
+        Body of every `SetApplianceMode*` call. Only the fields relevant to the
+        targeted mode are populated by the app.
       properties:
         ApplianceModes:
-          type: integer
+          $ref: "#/components/schemas/EApplianceModes"
         Status:
           type: integer
+          description: |
+            `ApplianceModeStatus` — 1 engages the targeted mode, 0 clears it.
+          enum: [0, 1]
         Temperature:
-          type: number
+          type: integer
+          description: |
+            Target temperature in °C. The wire type is a **short**, so only whole
+            degrees are representable. The app's pickers offer 7–30 °C for Away,
+            Boost, Frost, Manual and Eco.
+
+            Special values: `7` is the fixed frost-protection floor; `255`
+            (0xFF) means "no explicit setpoint — follow the schedule" and is what
+            the app sends as the Advance temperature for Quantum / Storage
+            Heater models with no setback.
+          minimum: 0
+          maximum: 255
         Time:
           type: integer
+          description: Boost duration in minutes.
         Date:
           type: string
+          format: date-time
+          description: |
+            Away "away until" datetime. This is how the app expresses Away
+            duration; `NumberOfDays` is not used for heating appliances.
+            Unset is the .NET default `0001-01-01T00:00:00`.
         StatusTwo:
           type: integer
+          description: "`EStatusTwo` — 0 = UserTimer, 1 = HomeAllDay, 2 = OutAllDay."
+          enum: [0, 1, 2]
         NumberOfDays:
           type: integer
+          description: Legacy duration field; prefer `Date`.
         Frequency:
           type: integer
+          description: |
+            `EFrequency` — hot-water hygiene (anti-legionella) cycle:
+            0 = Off, 1 = Daily, 7 = Weekly, 28 = Monthly.
+          enum: [0, 1, 7, 28]
+
+    EApplianceModes:
+      type: integer
+      description: |
+        `[Flags] EApplianceModes` bitfield, as decompiled from APK 2.26.0. Used
+        both in `ApplianceStatus.ApplianceModes` (which modes are engaged) and in
+        `ApplianceModeSettings.ApplianceModes` (which mode a write targets).
+
+        | Bit | Value | Name |
+        | --- | --- | --- |
+        | 0x01 | 1 | TimerMode |
+        | 0x02 | 2 | **Boost** |
+        | 0x04 | 4 | **Away** |
+        | 0x08 | 8 | Holiday |
+        | 0x10 | 16 | Advance |
+        | 0x20 | 32 | FrostProtect |
+        | 0x40 | 64 | Eco |
+        | 0x80 | 128 | Manual |
+        | 0x100 | 256 | Hygiene |
+        | 0x200 | 512 | Standalone |
+        | 0x400 | 1024 | SafeMode |
+        | 0x800 | 2048 | Shutdown |
+        | 0x1000 | 4096 | Comms |
+        | 0x2000 | 8192 | Normal |
+        | 0x4000 | 16384 | Standby |
+
+        Note that Boost is **2** and Away is **4**; 16 and 32 are Advance and
+        FrostProtect respectively. Sending 16/32 for boost/away commands the
+        wrong mode and silently discards the requested temperature/duration.
+      example: 3
 
     TsiEnergyReport:
       type: object
@@ -291,7 +384,15 @@ paths:
 
   /RemoteControl/SetTimerMode:
     post:
-      summary: Set timer mode and periods for an appliance
+      summary: Edit an appliance's schedule periods
+      description: |
+        This is the **schedule editor**: it writes `TimerMode` plus the full set
+        of `TimerPeriods`.
+
+        It is *not* the way to change mode or setpoint. Quantum rejects such use
+        with **HTTP 403**. Use `/RemoteControl/SetApplianceSetpointTemperature`
+        for a target temperature and `/RemoteControl/SetApplianceMode`
+        (FrostProtect) to turn an appliance off.
       requestBody:
         required: true
         content:
@@ -304,10 +405,54 @@ paths:
       responses:
         "200":
           description: Success
+        "403":
+          description: |
+            Returned by Quantum / Storage Heater models when this endpoint is
+            used to change mode or setpoint rather than to edit periods.
+
+  /RemoteControl/CopyScheduleToAppliances:
+    post:
+      summary: Copy one appliance's schedule onto other appliances
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                HubId:
+                  type: string
+                FromApplianceId:
+                  type: string
+                ApplianceIds:
+                  type: array
+                  items:
+                    type: string
+                TimerMode:
+                  type: integer
+      responses:
+        "200":
+          description: Success
 
   /RemoteControl/SetApplianceMode:
     post:
-      summary: Set appliance mode (Boost, Away, etc.)
+      summary: Engage or clear an appliance mode (Boost, Away, Advance, FrostProtect, …)
+      description: |
+        Single write that targets one `EApplianceModes` bit. `Settings.Status`
+        engages (1) or clears (0) it.
+
+        Per-mode field usage as built by the app for heating appliances:
+
+        | Action | ApplianceModes | Status | Other fields |
+        | --- | --- | --- | --- |
+        | Boost on | 2 | 1 | `Time` = minutes, `Temperature` |
+        | Boost off | 2 | 0 | — |
+        | Away on | 4 | 1 | `Temperature` (7–30, defaults 7), `Date` = away-until |
+        | Away off | 4 | 0 | — |
+        | Advance | 16 | 1 / 0 | `Temperature` = current/next period, or `255` on Quantum / Storage Heater |
+        | Off (frost) | 32 | 1 | `Temperature` = 7 |
+        | Manual | 128 | 1 | `Temperature` |
+        | Eco | 64 | 1 | `Temperature` |
       requestBody:
         required: true
         content:
@@ -323,6 +468,74 @@ paths:
                   type: array
                   items:
                     type: string
+      responses:
+        "200":
+          description: Success
+
+  /RemoteControl/SetApplianceSetpointTemperature:
+    post:
+      summary: Set the active setpoint (non-destructive)
+      description: |
+        The dedicated setpoint endpoint the app uses. Applies a target
+        immediately and leaves the stored schedule periods untouched — unlike
+        `SetTimerMode`, which rewrites them and returns 403 on Quantum.
+
+        Validated live on a Quantum QM100RF: returns 200 with the schedule
+        unchanged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                HubId:
+                  type: string
+                ApplianceIds:
+                  type: array
+                  items:
+                    type: string
+                Temperature:
+                  type: integer
+                  description: Target °C. Wire type is a byte, so whole degrees only.
+                  minimum: 0
+                  maximum: 255
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: boolean
+
+  /RemoteControl/SetSetbackTemperature:
+    post:
+      summary: Write the setback temperature (untested)
+      description: |
+        Confirmed present in APK 2.26.0; not yet validated on live hardware.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                HubId:
+                  type: string
+                ApplianceIds:
+                  type: array
+                  items:
+                    type: string
+                Status:
+                  type: integer
+                  description: |
+                    `EStatus` — 0 = Inactive, 1 = Active, 2 = DSMMode,
+                    3 = LocalFrequencyControlActive.
+                  enum: [0, 1, 2, 3]
+                Temperature:
+                  type: integer
+                  minimum: 0
+                  maximum: 255
       responses:
         "200":
           description: Success
@@ -367,6 +580,109 @@ paths:
                   type: array
                   items:
                     type: string
+      responses:
+        "200":
+          description: Success
+
+  # ---------------------------------------------------------------------------
+  # Hot-water cylinders (`WaterHeater`) and heat-pump cylinders
+  # (`ASHW Cylinder`). All confirmed present in APK 2.26.0 but **untested** —
+  # no cylinder hardware available. All mode writes reuse ApplianceModeSettings.
+  # ---------------------------------------------------------------------------
+
+  /RemoteControl/SetApplianceModeHwc:
+    post:
+      summary: Set a hot-water cylinder mode (untested)
+      requestBody:
+        $ref: "#/components/requestBodies/ApplianceModeRequest"
+      responses:
+        "200":
+          description: Success
+
+  /RemoteControl/SetBoostTemperatureHwc:
+    post:
+      summary: Set a cylinder's Boost temperature (untested)
+      description: Sends `ApplianceModes` = Boost (2) with `Temperature`.
+      requestBody:
+        $ref: "#/components/requestBodies/ApplianceModeRequest"
+      responses:
+        "200":
+          description: Success
+
+  /RemoteControl/SetNormalTemperatureHwc:
+    post:
+      summary: Set a cylinder's Normal temperature (untested)
+      description: Sends `ApplianceModes` = Normal (8192) with `Temperature`.
+      requestBody:
+        $ref: "#/components/requestBodies/ApplianceModeRequest"
+      responses:
+        "200":
+          description: Success
+
+  /RemoteControl/SetHygieneSettingsHwc:
+    post:
+      summary: Configure a cylinder's anti-legionella cycle (untested)
+      description: |
+        Sends `ApplianceModes` = Hygiene (256) with `Temperature` and
+        `Frequency` (`EFrequency`).
+      requestBody:
+        $ref: "#/components/requestBodies/ApplianceModeRequest"
+      responses:
+        "200":
+          description: Success
+
+  /RemoteControl/SetApplianceModeHeatPumpHwc:
+    post:
+      summary: Set an ASHW (heat-pump) cylinder mode (untested)
+      requestBody:
+        $ref: "#/components/requestBodies/ApplianceModeRequest"
+      responses:
+        "200":
+          description: Success
+
+  /RemoteControl/SetHygieneSettingsHeatPumpHwc:
+    post:
+      summary: Configure an ASHW cylinder's anti-legionella cycle (untested)
+      requestBody:
+        $ref: "#/components/requestBodies/ApplianceModeRequest"
+      responses:
+        "200":
+          description: Success
+
+  /RemoteControl/ApiGetTimerModeDetailsForHeatPumpHwcAppliance:
+    post:
+      summary: Read an ASHW cylinder's schedule (untested)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                HubId:
+                  type: string
+                ApplianceId:
+                  type: string
+      responses:
+        "200":
+          description: Timer details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimerModeSettings"
+
+  /RemoteControl/UpdateHeatPumpHwcSchedulePeriods:
+    post:
+      summary: Write an ASHW cylinder's schedule periods (untested)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                TimerModeSettings:
+                  $ref: "#/components/schemas/TimerModeSettings"
       responses:
         "200":
           description: Success

@@ -17,15 +17,26 @@ Tracking issues: library #53 (live power), #52 (frost/setback writes).
 
 ## Frost / setback write paths
 
+**Resolved (2026-09, APK 2.26.0 decompilation — see [decompiled-api-reference.md](decompiled-api-reference.md)):**
+
+- **Frost** is a mode bit, not a timer mode: `SetApplianceMode` with
+  `ApplianceModes = FrostProtect (32)`, `Status = 1`, `Temperature = 7`. This is
+  also how the app turns a heater **off**. Implemented as
+  `set_frost_protect()` / `turn_off()`. `set_mode(..., TimerMode.FROST_PROTECTION)`
+  writes the schedule editor instead and returns **403 on Quantum**.
+- **Setback** has a dedicated RPC after all:
+  `POST /RemoteControl/SetSetbackTemperature` with
+  `{ HubId, ApplianceIds[], Status: EStatus, Temperature: byte }`. Implemented as
+  `set_setback_temperature()`; the capability matrix now reports
+  `setback_write=True`. **Not yet validated on live hardware.**
+
 **Readable today:**
 
 - `ApplianceStatus.SetbackEnabled`, `SetbackEnabledInStatusFrame`, `SetbackTemperature`
-- Timer mode `TimerMode.FROST_PROTECTION = 2` via `SetTimerMode` / `get_appliance_features`
 
-**Write:**
-
-- Frost: likely achievable by `set_mode(..., TimerMode.FROST_PROTECTION)` (timer mode write already implemented). Confirm against app behaviour before documenting as frost control.
-- Setback enable/temperature: **no confirmed dedicated RPC** in captures. Capability matrix marks `setback_write=False` until evidence lands.
+**Remaining capture work:** confirm `SetSetbackTemperature` end-to-end on a live
+appliance, and whether `EStatus.DSMMode` / `LocalFrequencyControlActive` are
+accepted outside a DSM deployment.
 
 ## Capture checklist
 
