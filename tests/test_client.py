@@ -330,7 +330,7 @@ async def test_get_tsi_energy_report_omits_hub_id_when_none(aresponses):
 
 @pytest.mark.asyncio
 async def test_set_boost(aresponses):
-    """Boost helper posts ApplianceModes=16 with duration in Time."""
+    """Boost helper posts ApplianceModes=2 (Boost) with duration in Time."""
     captured: dict = {}
 
     async def handler(request):
@@ -352,9 +352,10 @@ async def test_set_boost(aresponses):
 
     assert captured["body"]["HubId"] == "hub-1"
     assert captured["body"]["ApplianceIds"] == ["a-1"]
-    assert captured["body"]["Settings"]["ApplianceModes"] == 16
+    # 2 == EApplianceModes.Boost. 16 (the old value) is Advance.
+    assert captured["body"]["Settings"]["ApplianceModes"] == 2
     assert captured["body"]["Settings"]["Status"] == 1
-    assert captured["body"]["Settings"]["Temperature"] == 24.0
+    assert captured["body"]["Settings"]["Temperature"] == 24
     assert captured["body"]["Settings"]["Time"] == 90
 
 

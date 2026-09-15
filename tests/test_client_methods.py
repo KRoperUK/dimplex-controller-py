@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import aiohttp
 import pytest
 
 from dimplex_controller.client import DimplexControl
-from dimplex_controller.models import TimerMode, TimerPeriod, Zone
+from dimplex_controller.const import NO_SETPOINT_SENTINEL, NULL_DATETIME
+from dimplex_controller.models import ApplianceModeFlag, TimerMode, TimerPeriod, Zone
 
 HOST = "mobileapi.gdhv-iot.com"
 
@@ -140,7 +143,7 @@ async def test_set_target_temperature_installs_full_week_when_empty(aresponses):
 
 @pytest.mark.asyncio
 async def test_set_away_and_clear_away(aresponses):
-    """set_away enables Away (modes=32, status=1); clear_away disables it."""
+    """set_away enables Away (modes=4, status=1); clear_away disables it."""
     bodies: list[dict] = []
 
     async def handler(request):
@@ -155,17 +158,40 @@ async def test_set_away_and_clear_away(aresponses):
         await client.set_away("hub-1", ["a-1"], temperature=12.0, number_of_days=3)
         await client.clear_away("hub-1", ["a-1"])
 
-    assert bodies[0]["Settings"]["ApplianceModes"] == 32
+    assert bodies[0]["Settings"]["ApplianceModes"] == int(ApplianceModeFlag.AWAY) == 4
     assert bodies[0]["Settings"]["Status"] == 1
-    assert bodies[0]["Settings"]["Temperature"] == 12.0
+    assert bodies[0]["Settings"]["Temperature"] == 12
     assert bodies[0]["Settings"]["NumberOfDays"] == 3
+    # number_of_days is translated into the Date the app actually sends.
+    assert bodies[0]["Settings"]["Date"] != NULL_DATETIME
     assert bodies[1]["Settings"]["Status"] == 0
     assert bodies[1]["Settings"]["NumberOfDays"] == 0
+    assert bodies[1]["Settings"]["Date"] == NULL_DATETIME
+
+
+@pytest.mark.asyncio
+async def test_set_away_accepts_explicit_until(aresponses):
+    """An explicit away-until datetime is serialised into Date."""
+    captured: dict = {}
+
+    async def handler(request):
+        captured["body"] = await request.json()
+        return _json(aresponses)
+
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceMode", "POST", handler)
+
+    until = datetime(2026, 12, 24, 9, 30, tzinfo=timezone.utc)
+    async with aiohttp.ClientSession() as session:
+        await _authed(session).set_away("hub-1", ["a-1"], temperature=18.0, until=until)
+
+    # Naive .NET DateTime — no offset suffix.
+    assert captured["body"]["Settings"]["Date"] == "2026-12-24T09:30:00"
+    assert captured["body"]["Settings"]["Temperature"] == 18
 
 
 @pytest.mark.asyncio
 async def test_clear_boost(aresponses):
-    """clear_boost disables Boost (status=0, time=0)."""
+    """clear_boost disables Boost (modes=2, status=0, time=0)."""
     captured: dict = {}
 
     async def handler(request):
@@ -177,9 +203,51 @@ async def test_clear_boost(aresponses):
     async with aiohttp.ClientSession() as session:
         await _authed(session).clear_boost("hub-1", ["a-1"])
 
-    assert captured["body"]["Settings"]["ApplianceModes"] == 16
+    assert captured["body"]["Settings"]["ApplianceModes"] == int(ApplianceModeFlag.BOOST) == 2
     assert captured["body"]["Settings"]["Status"] == 0
     assert captured["body"]["Settings"]["Time"] == 0
+
+
+@pytest.mark.asyncio
+async def test_set_frost_protect_is_the_off_path(aresponses):
+    """turn_off engages FrostProtect at the 7 °C floor, not SetTimerMode."""
+    captured: dict = {}
+
+    async def handler(request):
+        captured["body"] = await request.json()
+        return _json(aresponses)
+
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceMode", "POST", handler)
+
+    async with aiohttp.ClientSession() as session:
+        await _authed(session).turn_off("hub-1", ["a-1"])
+
+    settings = captured["body"]["Settings"]
+    assert settings["ApplianceModes"] == int(ApplianceModeFlag.FROST_PROTECT) == 32
+    assert settings["Status"] == 1
+    assert settings["Temperature"] == 7
+
+
+@pytest.mark.asyncio
+async def test_set_advance_defaults_to_no_setpoint_sentinel(aresponses):
+    """Advance with no explicit temperature sends the 0xFF sentinel."""
+    bodies: list[dict] = []
+
+    async def handler(request):
+        bodies.append(await request.json())
+        return _json(aresponses)
+
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceMode", "POST", handler)
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceMode", "POST", handler)
+
+    async with aiohttp.ClientSession() as session:
+        client = _authed(session)
+        await client.set_advance("hub-1", ["a-1"])
+        await client.set_advance("hub-1", ["a-1"], temperature=19.0)
+
+    assert bodies[0]["Settings"]["ApplianceModes"] == int(ApplianceModeFlag.ADVANCE) == 16
+    assert bodies[0]["Settings"]["Temperature"] == NO_SETPOINT_SENTINEL
+    assert bodies[1]["Settings"]["Temperature"] == 19
 
 
 @pytest.mark.asyncio
@@ -209,3 +277,25 @@ async def test_get_schedule_alias(aresponses):
 
     assert schedule.TimerMode == 1
     assert len(schedule.TimerPeriods) == 2
+
+
+@pytest.mark.asyncio
+async def test_manual_and_eco_mode_helpers(aresponses):
+    """Manual (128) and Eco (64) engage via SetApplianceMode."""
+    bodies: list[dict] = []
+
+    async def handler(request):
+        bodies.append(await request.json())
+        return _json(aresponses)
+
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceMode", "POST", handler)
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceMode", "POST", handler)
+
+    async with aiohttp.ClientSession() as session:
+        client = _authed(session)
+        await client.set_manual("hub-1", ["a-1"], temperature=20.0)
+        await client.set_eco_mode("hub-1", ["a-1"], temperature=17.0)
+
+    assert bodies[0]["Settings"]["ApplianceModes"] == int(ApplianceModeFlag.MANUAL) == 128
+    assert bodies[0]["Settings"]["Temperature"] == 20
+    assert bodies[1]["Settings"]["ApplianceModes"] == int(ApplianceModeFlag.ECO) == 64

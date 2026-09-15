@@ -26,6 +26,7 @@ import aiohttp
 
 from .auth import TokenBundle
 from .client import DimplexControl
+from .const import DEFAULT_AWAY_TEMPERATURE, DEFAULT_BOOST_TEMPERATURE
 from .exceptions import DimplexError
 
 _CoroFactory = Callable[[DimplexControl], Awaitable[int]]
@@ -142,7 +143,11 @@ async def cmd_status(client: DimplexControl, args: argparse.Namespace) -> int:
         print("(no status — appliance offline or empty overview)")
         return 0
     status = overview[0]
-    print(json.dumps(status.model_dump(mode="json"), indent=2, default=str))
+    payload = status.model_dump(mode="json")
+    # Decoded views the raw payload does not give you.
+    payload["_active_modes"] = status.active_modes
+    payload["_active_setpoint_temperature"] = status.active_setpoint_temperature
+    print(json.dumps(payload, indent=2, default=str))
     return 0
 
 
@@ -180,6 +185,8 @@ async def cmd_away(client: DimplexControl, args: argparse.Namespace) -> int:
         [args.appliance],
         temperature=args.temperature,
         enable=not args.clear,
+        until=args.until,
+        number_of_days=args.days,
     )
     print("ok")
     return 0
@@ -190,6 +197,30 @@ async def cmd_eco(client: DimplexControl, args: argparse.Namespace) -> int:
         print("error: control commands require --yes", file=sys.stderr)
         return 2
     await client.set_eco_start(args.hub, [args.appliance], not args.clear)
+    print("ok")
+    return 0
+
+
+async def cmd_off(client: DimplexControl, args: argparse.Namespace) -> int:
+    """Turn the appliance off the way the app does — frost protection at 7 °C."""
+    if not args.yes:
+        print("error: control commands require --yes", file=sys.stderr)
+        return 2
+    await client.set_frost_protect(args.hub, [args.appliance], enable=not args.clear)
+    print("ok")
+    return 0
+
+
+async def cmd_advance(client: DimplexControl, args: argparse.Namespace) -> int:
+    if not args.yes:
+        print("error: control commands require --yes", file=sys.stderr)
+        return 2
+    await client.set_advance(
+        args.hub,
+        [args.appliance],
+        enable=not args.clear,
+        temperature=args.temperature,
+    )
     print("ok")
     return 0
 
@@ -236,21 +267,42 @@ def build_parser() -> argparse.ArgumentParser:
     p_energy.add_argument("--days", type=int, default=30)
     p_energy.set_defaults(func=cmd_energy)
 
-    for name, help_text, defaults in (
-        ("boost", "Enable or clear boost (--yes required)", {"minutes": 60, "temperature": 25.0}),
-        ("away", "Enable or clear away (--yes required)", {"temperature": 16.0}),
+    _CONTROL_COMMANDS: dict[str, Callable[..., Awaitable[int]]] = {
+        "boost": cmd_boost,
+        "away": cmd_away,
+        "eco": cmd_eco,
+        "off": cmd_off,
+        "advance": cmd_advance,
+    }
+
+    for name, help_text, opts in (
+        (
+            "boost",
+            "Enable or clear timed Boost (--yes required)",
+            {"temperature": DEFAULT_BOOST_TEMPERATURE, "minutes": 60},
+        ),
+        (
+            "away",
+            "Enable or clear Away setback, 7-30 °C (--yes required)",
+            {"temperature": DEFAULT_AWAY_TEMPERATURE, "away_until": True},
+        ),
         ("eco", "Enable or clear EcoStart (--yes required)", {}),
+        ("off", "Turn off via frost protection at 7 °C (--yes required)", {}),
+        ("advance", "Advance to the next schedule period (--yes required)", {"temperature": None}),
     ):
         p = sub.add_parser(name, help=help_text)
         p.add_argument("hub")
         p.add_argument("appliance")
         p.add_argument("--yes", action="store_true", help="Confirm control write")
         p.add_argument("--clear", action="store_true", help="Disable the mode")
-        if "temperature" in defaults:
-            p.add_argument("--temperature", type=float, default=defaults["temperature"])
-        if "minutes" in defaults:
-            p.add_argument("--minutes", type=int, default=defaults["minutes"])
-        p.set_defaults(func={"boost": cmd_boost, "away": cmd_away, "eco": cmd_eco}[name])
+        if "temperature" in opts:
+            p.add_argument("--temperature", type=float, default=opts["temperature"])
+        if "minutes" in opts:
+            p.add_argument("--minutes", type=int, default=opts["minutes"])
+        if opts.get("away_until"):
+            p.add_argument("--days", type=int, default=0, help="Away duration in days (converted to a date)")
+            p.add_argument("--until", help="Away-until datetime, ISO-8601 (overrides --days)")
+        p.set_defaults(func=_CONTROL_COMMANDS[name])
 
     return parser
 
