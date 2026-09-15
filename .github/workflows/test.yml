@@ -75,7 +75,10 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          # The lock too: this job reads the mypy version out of it.
+          cache-dependency-path: |
+            pyproject.toml
+            poetry.lock
 
       - name: Install ruff
         # Pinned to the same version as .pre-commit-config.yaml so the pre-commit
@@ -89,7 +92,20 @@ jobs:
         run: ruff format --check dimplex_controller/ tests/
 
       - name: Install mypy
-        run: pip install mypy
+        # The version poetry resolves, read from the lock rather than left to
+        # float. `poetry run mypy` locally and this job must agree: with `strict`
+        # set, a version difference is not cosmetic, it changes which checks run.
+        run: pip install "mypy==$(awk '/^name = "mypy"$/{getline; print; exit}' poetry.lock | sed -E 's/^version = "(.*)"$/\1/')"
+
+      - name: Install runtime dependencies
+        # mypy must be able to resolve pydantic and aiohttp, or `strict` cannot
+        # check the library at all. With `ignore_missing_imports = true`, an
+        # unresolvable pydantic makes `BaseModel` itself `Any`, and strict's
+        # `disallow_subclassing_any` then reports "Class cannot subclass
+        # BaseModel (has type Any)" for every model in the package — 20 errors,
+        # none of them real. Installing the package brings its own dependencies,
+        # so this cannot drift when a runtime dependency is added.
+        run: pip install .
 
       - name: Type check with mypy
         # Convert mypy output into GitHub annotations (inline on the PR diff) while
