@@ -32,12 +32,18 @@ class ApplianceCapabilities:
     open_window: bool = True
     eco_start: bool = True
     setback_read: bool = True
-    setback_write: bool = False  # no confirmed write API yet
+    setback_write: bool = True  # POST /RemoteControl/SetSetbackTemperature
     frost: bool = True  # ApplianceModeFlag.FROST_PROTECT (the app's "off")
     timer: bool = True
+    # POST /RemoteControl/SetApplianceSetpointTemperature — the non-destructive
+    # setpoint path. Preferred over rewriting the schedule via SetTimerMode,
+    # which Quantum rejects with HTTP 403.
+    setpoint_write: bool = True
     energy_meter: bool = False
     storage: bool = False
     hot_water: bool = False
+    heat_pump: bool = False
+    hygiene: bool = False
     climate: bool = True
     min_temp: float = MODE_TEMP_MIN
     max_temp: float = MODE_TEMP_MAX
@@ -68,9 +74,12 @@ class ApplianceCapabilities:
             "setback_write": self.setback_write,
             "frost": self.frost,
             "timer": self.timer,
+            "setpoint_write": self.setpoint_write,
             "energy_meter": self.energy_meter,
             "storage": self.storage,
             "hot_water": self.hot_water,
+            "heat_pump": self.heat_pump,
+            "hygiene": self.hygiene,
             "climate": self.climate,
             "min_temp": self.min_temp,
             "max_temp": self.max_temp,
@@ -130,6 +139,7 @@ def capabilities_for(
     storage = False
     energy_meter = False
     hot_water = False
+    heat_pump = False
     if prov is not None:
         if prov.charge_capacity is not None and prov.charge_capacity > 0:
             storage = True
@@ -140,6 +150,9 @@ def capabilities_for(
         storage = True
         energy_meter = True
     if any(k in tokens for k in ("hot water", "hotwater", "cylinder", "dhw", "waterheater")):
+        hot_water = True
+    if any(k in tokens for k in ("ashw", "heat pump", "heatpump")):
+        heat_pump = True
         hot_water = True
 
     boost = True
@@ -180,11 +193,14 @@ def capabilities_for(
         open_window=open_window,
         eco_start=eco_start,
         setback_read=setback_read,
-        setback_write=False,
+        setback_write=True,
         frost=frost,
         timer=timer,
+        setpoint_write=True,
         energy_meter=energy_meter,
         storage=storage,
         hot_water=hot_water,
+        heat_pump=heat_pump,
+        hygiene=hot_water,
         climate=climate,
     )

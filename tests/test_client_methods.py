@@ -9,7 +9,14 @@ import pytest
 
 from dimplex_controller.client import DimplexControl
 from dimplex_controller.const import NO_SETPOINT_SENTINEL, NULL_DATETIME
-from dimplex_controller.models import ApplianceModeFlag, TimerMode, TimerPeriod, Zone
+from dimplex_controller.models import (
+    ApplianceModeFlag,
+    HygieneFrequency,
+    SetbackStatus,
+    TimerMode,
+    TimerPeriod,
+    Zone,
+)
 
 HOST = "mobileapi.gdhv-iot.com"
 
@@ -251,6 +258,97 @@ async def test_set_advance_defaults_to_no_setpoint_sentinel(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_set_appliance_setpoint_temperature(aresponses):
+    """The dedicated setpoint endpoint posts a rounded byte temperature."""
+    captured: dict = {}
+
+    async def handler(request):
+        captured["body"] = await request.json()
+        return _json(aresponses, "true")
+
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceSetpointTemperature", "POST", handler)
+
+    async with aiohttp.ClientSession() as session:
+        await _authed(session).set_appliance_setpoint_temperature("hub-1", ["a-1"], 21.5)
+
+    assert captured["body"] == {"HubId": "hub-1", "ApplianceIds": ["a-1"], "Temperature": 22}
+
+
+@pytest.mark.asyncio
+async def test_set_setback_temperature(aresponses):
+    """Setback write posts an EStatus byte plus the temperature."""
+    bodies: list[dict] = []
+
+    async def handler(request):
+        bodies.append(await request.json())
+        return _json(aresponses)
+
+    aresponses.add(HOST, "/api/RemoteControl/SetSetbackTemperature", "POST", handler)
+    aresponses.add(HOST, "/api/RemoteControl/SetSetbackTemperature", "POST", handler)
+
+    async with aiohttp.ClientSession() as session:
+        client = _authed(session)
+        await client.set_setback_temperature("hub-1", ["a-1"], temperature=16.4)
+        await client.set_setback_temperature("hub-1", ["a-1"], temperature=16.0, status=SetbackStatus.INACTIVE)
+
+    assert bodies[0] == {"HubId": "hub-1", "ApplianceIds": ["a-1"], "Status": 1, "Temperature": 16}
+    assert bodies[1]["Status"] == 0
+
+
+@pytest.mark.asyncio
+async def test_hot_water_helpers_target_hwc_endpoints(aresponses):
+    """Cylinder helpers post ApplianceModeSettings to the HWC endpoints."""
+    bodies: dict[str, dict] = {}
+
+    def handler_for(name: str):
+        async def handler(request):
+            bodies[name] = await request.json()
+            return _json(aresponses)
+
+        return handler
+
+    aresponses.add(HOST, "/api/RemoteControl/SetBoostTemperatureHwc", "POST", handler_for("boost"))
+    aresponses.add(HOST, "/api/RemoteControl/SetNormalTemperatureHwc", "POST", handler_for("normal"))
+    aresponses.add(HOST, "/api/RemoteControl/SetHygieneSettingsHeatPumpHwc", "POST", handler_for("hygiene"))
+
+    async with aiohttp.ClientSession() as session:
+        client = _authed(session)
+        await client.set_hot_water_boost_temperature("hub-1", ["a-1"], 60.0)
+        await client.set_hot_water_normal_temperature("hub-1", ["a-1"], 50.0)
+        await client.set_hot_water_hygiene(
+            "hub-1", ["a-1"], temperature=65.0, frequency=HygieneFrequency.WEEKLY, heat_pump=True
+        )
+
+    assert bodies["boost"]["Settings"]["ApplianceModes"] == int(ApplianceModeFlag.BOOST)
+    assert bodies["boost"]["Settings"]["Temperature"] == 60
+    assert bodies["normal"]["Settings"]["ApplianceModes"] == int(ApplianceModeFlag.NORMAL) == 8192
+    assert bodies["hygiene"]["Settings"]["ApplianceModes"] == int(ApplianceModeFlag.HYGIENE) == 256
+    assert bodies["hygiene"]["Settings"]["Frequency"] == 7
+
+
+@pytest.mark.asyncio
+async def test_copy_schedule_to_appliances(aresponses):
+    """Schedule copy posts the source appliance and the targets."""
+    captured: dict = {}
+
+    async def handler(request):
+        captured["body"] = await request.json()
+        return _json(aresponses)
+
+    aresponses.add(HOST, "/api/RemoteControl/CopyScheduleToAppliances", "POST", handler)
+
+    async with aiohttp.ClientSession() as session:
+        await _authed(session).copy_schedule_to_appliances("hub-1", "a-1", ["a-2", "a-3"], timer_mode=1)
+
+    assert captured["body"] == {
+        "HubId": "hub-1",
+        "FromApplianceId": "a-1",
+        "ApplianceIds": ["a-2", "a-3"],
+        "TimerMode": 1,
+    }
+
+
+@pytest.mark.asyncio
 async def test_set_open_window_detection(aresponses):
     """set_open_window_detection posts the Enable flag."""
     captured: dict = {}
@@ -299,3 +397,53 @@ async def test_manual_and_eco_mode_helpers(aresponses):
     assert bodies[0]["Settings"]["ApplianceModes"] == int(ApplianceModeFlag.MANUAL) == 128
     assert bodies[0]["Settings"]["Temperature"] == 20
     assert bodies[1]["Settings"]["ApplianceModes"] == int(ApplianceModeFlag.ECO) == 64
+
+
+@pytest.mark.asyncio
+async def test_set_hot_water_mode_selects_heat_pump_endpoint(aresponses):
+    """heat_pump=True routes to the ASHW cylinder endpoint."""
+    seen: list[str] = []
+
+    async def handler(request):
+        seen.append(request.path)
+        return _json(aresponses)
+
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceModeHwc", "POST", handler)
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceModeHeatPumpHwc", "POST", handler)
+
+    async with aiohttp.ClientSession() as session:
+        client = _authed(session)
+        await client.set_hot_water_mode("hub-1", ["a-1"], ApplianceModeFlag.NORMAL, temperature=50.0)
+        await client.set_hot_water_mode("hub-1", ["a-1"], ApplianceModeFlag.BOOST, temperature=60.0, heat_pump=True)
+
+    assert seen == [
+        "/api/RemoteControl/SetApplianceModeHwc",
+        "/api/RemoteControl/SetApplianceModeHeatPumpHwc",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_heat_pump_hot_water_schedule_round_trip(aresponses):
+    """The ASHW schedule is read then written back through its own endpoints."""
+    captured: dict = {}
+
+    async def write_handler(request):
+        captured["body"] = await request.json()
+        return _json(aresponses)
+
+    aresponses.add(
+        HOST,
+        "/api/RemoteControl/ApiGetTimerModeDetailsForHeatPumpHwcAppliance",
+        "POST",
+        _json(aresponses, _TIMER_BODY),
+    )
+    aresponses.add(HOST, "/api/RemoteControl/UpdateHeatPumpHwcSchedulePeriods", "POST", write_handler)
+
+    async with aiohttp.ClientSession() as session:
+        client = _authed(session)
+        settings = await client.get_heat_pump_hot_water_schedule("hub-1", "a-1")
+        settings.TimerPeriods[0].Temperature = 55.0
+        await client.set_heat_pump_hot_water_schedule(settings)
+
+    assert len(settings.TimerPeriods) == 2
+    assert captured["body"]["TimerModeSettings"]["TimerPeriods"][0]["Temperature"] == 55.0
