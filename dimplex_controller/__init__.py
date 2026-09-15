@@ -1,7 +1,10 @@
 """Dimplex Controller Client.
 
-Async Python client for the Glen Dimplex Heating & Ventilation (GDHV) cloud
-API. See :class:`~dimplex_controller.client.DimplexControl` for the entry
+Unofficial async Python client for the Glen Dimplex Heating & Ventilation
+(GDHV) cloud API. Not affiliated with, endorsed by, or supported by Dimplex
+or the Glen Dimplex Group: the protocol was recovered by reverse-engineering
+the official Dimplex Control Android app, so Dimplex may change or withdraw
+it without notice. See :class:`~dimplex_controller.client.DimplexControl` for the entry
 point and :meth:`DimplexControl.get_appliance_overview` for the read path
 used by the Home Assistant integration.
 

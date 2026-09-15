@@ -1,5 +1,10 @@
 # Getting started
 
+> **Unofficial library.** Not affiliated with or supported by Dimplex. It talks to the same
+> private cloud API as the official Dimplex Control app, discovered by reverse-engineering
+> that app — so Dimplex may change or break it without notice. See the
+> [README](../README.md) for the full disclaimer.
+
 This guide covers everything you need to go from zero to controlling your Dimplex heating with `dimplex-controller-py`.
 
 ## Prerequisites
