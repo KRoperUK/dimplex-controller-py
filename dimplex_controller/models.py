@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .const import NO_SETPOINT_SENTINEL, NULL_DATETIME
+
 
 class TimerMode(IntEnum):
     """Observed timer / operation mode values for ``TimerModeSettings.TimerMode``.
@@ -22,17 +24,69 @@ class TimerMode(IntEnum):
 
 
 class ApplianceModeFlag(IntFlag):
-    """Bit flags for ``ApplianceStatus.ApplianceModes`` / mode write payloads.
+    """``EApplianceModes`` — the appliance mode bitfield.
 
-    Only bits confirmed in traffic or the official app docs are named.
-    ``BOOST`` (16) is used by the mobile app for boost mode.
-    ``AWAY`` (32) is inferred from status frame pairing with Away* fields —
-    treat as best-effort until more captures confirm it for every model.
+    Values are the ``[Flags] EApplianceModes`` enum from the official Dimplex
+    Control Android app (APK 2.26.0, ``DimplexControl.Models``). They appear
+    both in ``ApplianceStatus.ApplianceModes`` (which modes are engaged) and in
+    ``ApplianceModeSettings.ApplianceModes`` (which mode a write targets).
+
+    .. warning::
+       Releases before 0.13.0 defined ``BOOST = 16`` and ``AWAY = 32``, which
+       are in fact :attr:`ADVANCE` and :attr:`FROST_PROTECT`. Any caller that
+       hard-coded ``16``/``32`` for boost/away was commanding the wrong mode
+       (see dimplex-controller-hass#163).
     """
 
     NONE = 0
-    BOOST = 16
-    AWAY = 32
+    TIMER_MODE = 1  # 0x01 — schedule/timer running
+    BOOST = 2  # 0x02 — timed boost (``Time`` = minutes)
+    AWAY = 4  # 0x04 — away setback (``Date`` = away-until)
+    HOLIDAY = 8  # 0x08
+    ADVANCE = 16  # 0x10 — advance to next period
+    FROST_PROTECT = 32  # 0x20 — anti-freeze; also how the app does "off"
+    ECO = 64  # 0x40
+    MANUAL = 128  # 0x80
+    HYGIENE = 256  # 0x100 — hot-water cylinders
+    STANDALONE = 512  # 0x200
+    SAFE_MODE = 1024  # 0x400
+    SHUTDOWN = 2048  # 0x800
+    COMMS = 4096  # 0x1000
+    NORMAL = 8192  # 0x2000 — hot-water cylinders
+    STANDBY = 16384  # 0x4000
+
+
+class ApplianceModeStatus(IntEnum):
+    """``ApplianceModeSettings.Status`` — engage or clear the targeted mode."""
+
+    INACTIVE = 0
+    ACTIVE = 1
+
+
+class SetbackStatus(IntEnum):
+    """``EStatus`` — status byte used by ``SetSetbackTemperature``."""
+
+    INACTIVE = 0
+    ACTIVE = 1
+    DSM_MODE = 2
+    LOCAL_FREQUENCY_CONTROL_ACTIVE = 3
+
+
+class ScheduleProfile(IntEnum):
+    """``EStatusTwo`` — which day profile a schedule period set follows."""
+
+    USER_TIMER = 0
+    HOME_ALL_DAY = 1
+    OUT_ALL_DAY = 2
+
+
+class HygieneFrequency(IntEnum):
+    """``EFrequency`` — hot-water hygiene (anti-legionella) cycle frequency."""
+
+    OFF = 0
+    DAILY = 1
+    WEEKLY = 7
+    MONTHLY = 28
 
 
 class AutomaticProvisioning(BaseModel):
@@ -240,32 +294,124 @@ class ApplianceStatus(BaseModel):
             return ApplianceModeFlag.NONE
         return ApplianceModeFlag(self.ApplianceModes)
 
+    def has_mode(self, mode: ApplianceModeFlag) -> bool:
+        """True when every bit in ``mode`` is engaged."""
+        if mode == ApplianceModeFlag.NONE:
+            return False
+        return (self.mode_flags & mode) == mode
+
+    @property
+    def active_modes(self) -> list[str]:
+        """Names of the engaged mode bits (diagnostics / logging)."""
+        flags = self.mode_flags
+        return [member.name for member in ApplianceModeFlag if member.value and member in flags and member.name]
+
+    @property
+    def active_setpoint_temperature(self) -> float | None:
+        """``ActiveSetPointTemperature`` with the ``0xFF`` sentinel removed.
+
+        The cloud reports ``255`` to mean "no explicit setpoint — following the
+        schedule". Consumers that render this as a temperature must not show
+        255 °C, so prefer this property over the raw field.
+        """
+        value = self.ActiveSetPointTemperature
+        if value is None or int(value) == NO_SETPOINT_SENTINEL:
+            return None
+        return value
+
     @property
     def is_boost_active(self) -> bool:
-        """True when boost duration is set or the boost mode bit is present."""
-        if self.BoostDuration is not None and self.BoostDuration > 0:
-            return True
-        return bool(self.mode_flags & ApplianceModeFlag.BOOST)
+        """True when the :attr:`~ApplianceModeFlag.BOOST` bit is engaged.
+
+        Since 0.13.0 this reads the (now correct) mode bit rather than
+        inferring from ``BoostDuration``, which can hold a configured duration
+        while boost is not running. ``BoostDuration`` is only consulted when the
+        appliance did not report ``ApplianceModes`` at all.
+        """
+        if self.ApplianceModes is not None:
+            return self.has_mode(ApplianceModeFlag.BOOST)
+        return self.BoostDuration is not None and self.BoostDuration > 0
 
     @property
     def is_away_active(self) -> bool:
-        """True when away fields indicate an active away session."""
-        if self.AwayDateTime and self.AwayDateTime not in ("", "0001-01-01T00:00:00"):
-            return True
-        return bool(self.mode_flags & ApplianceModeFlag.AWAY)
+        """True when the :attr:`~ApplianceModeFlag.AWAY` bit is engaged.
+
+        Falls back to the ``AwayDateTime`` field only when ``ApplianceModes``
+        is absent — a stale away-until date can outlive the mode itself.
+        """
+        if self.ApplianceModes is not None:
+            return self.has_mode(ApplianceModeFlag.AWAY)
+        return bool(self.AwayDateTime and self.AwayDateTime not in ("", NULL_DATETIME))
+
+    @property
+    def is_frost_protect_active(self) -> bool:
+        """True when frost protection is engaged (the app's "off" state)."""
+        return self.has_mode(ApplianceModeFlag.FROST_PROTECT)
+
+    @property
+    def is_advance_active(self) -> bool:
+        """True when the appliance has advanced to its next schedule period."""
+        return self.has_mode(ApplianceModeFlag.ADVANCE)
+
+    @property
+    def is_timer_active(self) -> bool:
+        """True when the appliance is following its timer / schedule."""
+        return self.has_mode(ApplianceModeFlag.TIMER_MODE)
+
+    @property
+    def is_manual_active(self) -> bool:
+        """True when the appliance is held at a manual setpoint."""
+        return self.has_mode(ApplianceModeFlag.MANUAL)
+
+    @property
+    def is_eco_active(self) -> bool:
+        """True when the Eco mode bit is engaged.
+
+        Distinct from ``EcoStartEnabled``, which is the EcoStart pre-heat
+        *setting* rather than an engaged mode.
+        """
+        return self.has_mode(ApplianceModeFlag.ECO)
 
 
 class ApplianceModeSettings(BaseModel):
-    """Settings used to control appliance modes like Boost or Away."""
+    """``ApplianceModeSettings`` — the body of a ``SetApplianceMode*`` write.
+
+    Field semantics (APK 2.26.0):
+
+    * ``ApplianceModes`` — which mode the write targets (:class:`ApplianceModeFlag`).
+    * ``Status`` — ``1`` engages it, ``0`` clears it (:class:`ApplianceModeStatus`).
+    * ``Temperature`` — target °C. The wire type is a **short**, so values are
+      rounded to whole degrees; the app's pickers offer 7–30 °C.
+    * ``Time`` — Boost duration in minutes.
+    * ``Date`` — Away "away until" datetime (the app uses this, *not*
+      ``NumberOfDays``).
+    * ``StatusTwo`` — :class:`ScheduleProfile`.
+    * ``Frequency`` — :class:`HygieneFrequency`, hot-water cylinders only.
+    """
 
     ApplianceModes: int
     Status: int
-    Temperature: float = 23.0
+    Temperature: int = 23
     Time: int = 0
-    Date: str = "0001-01-01T00:00:00"
+    Date: str = NULL_DATETIME
     StatusTwo: int = 0
     NumberOfDays: int = 0
     Frequency: int = 0
+
+    @field_validator("Temperature", mode="before")
+    @classmethod
+    def _round_temperature(cls, value: Any) -> Any:
+        """Round fractional temperatures — the wire field is an integer short."""
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, float):
+            return int(round(value))
+        if isinstance(value, str):
+            try:
+                return int(round(float(value)))
+            except ValueError:
+                return value
+        return value
 
 
 class TsiEnergyReport(BaseModel):

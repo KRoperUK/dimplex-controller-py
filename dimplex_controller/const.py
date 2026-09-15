@@ -20,3 +20,30 @@ CLIENT_ID = "6c983ca3-506e-4933-8993-0e18e6a24bbd"
 SCOPE = "https://gdhvb2c.onmicrosoft.com/Mobile/read offline_access openid profile"
 REDIRECT_URI = "msal6c983ca3-506e-4933-8993-0e18e6a24bbd://auth/"
 B2C_POLICY = "B2C_1A_DimplexControlSignupSignin"
+
+# --- Temperature semantics ------------------------------------------------
+# Values below come from the official app's own pickers and control paths, as
+# recovered from Dimplex Control APK 2.26.0.
+# See ``docs/decompiled-api-reference.md``.
+
+# The mode carousels (Away / Boost / Frost / Manual / Eco) all offer 7–30 °C.
+MODE_TEMP_MIN = 7.0
+MODE_TEMP_MAX = 30.0
+
+# Frost protection is always driven at the anti-freeze floor.
+FROST_TEMPERATURE = 7.0
+
+# Away defaults to the frost floor (it is an anti-freeze setback by default)
+# but is user-settable across MODE_TEMP_MIN..MODE_TEMP_MAX.
+DEFAULT_AWAY_TEMPERATURE = FROST_TEMPERATURE
+
+# Boost's default in the app's picker.
+DEFAULT_BOOST_TEMPERATURE = 21.0
+
+# ``0xFF`` means "no explicit setpoint — follow the schedule". The cloud both
+# reports this in ``ActiveSetPointTemperature`` when idle *and* expects it as
+# the Advance temperature for Quantum / Storage Heater models with no setback.
+NO_SETPOINT_SENTINEL = 255
+
+# .NET ``default(DateTime)`` — how the cloud represents "unset" datetimes.
+NULL_DATETIME = "0001-01-01T00:00:00"

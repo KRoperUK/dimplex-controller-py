@@ -62,7 +62,19 @@ def test_parser_has_all_commands():
     # Reach into argparse internals to get subcommand names
     subparsers_action = next(a for a in parser._actions if hasattr(a, "_parser_class"))
     commands = set(subparsers_action.choices.keys())
-    assert commands >= {"login", "hubs", "zones", "appliances", "status", "energy", "boost", "away", "eco"}
+    assert commands >= {
+        "login",
+        "hubs",
+        "zones",
+        "appliances",
+        "status",
+        "energy",
+        "boost",
+        "away",
+        "eco",
+        "off",
+        "advance",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +256,32 @@ def test_eco_with_yes(cli_env, capsys):
     code = _run_cli(cli_env, ["eco", "h1", "a1", "--yes"])
     assert code == 0
     cli_env.set_eco_start.assert_awaited_once()
+
+
+def test_away_passes_duration_options(cli_env):
+    cli_env.set_away = AsyncMock()
+    code = _run_cli(cli_env, ["away", "h1", "a1", "--yes", "--temperature", "18", "--days", "3"])
+    assert code == 0
+    kwargs = cli_env.set_away.call_args.kwargs
+    assert kwargs["temperature"] == 18.0
+    assert kwargs["number_of_days"] == 3
+    assert kwargs["until"] is None
+
+
+def test_off_engages_frost_protection(cli_env):
+    cli_env.set_frost_protect = AsyncMock()
+    assert _run_cli(cli_env, ["off", "h1", "a1"]) == 2
+    code = _run_cli(cli_env, ["off", "h1", "a1", "--yes"])
+    assert code == 0
+    assert cli_env.set_frost_protect.call_args.kwargs["enable"] is True
+
+
+def test_advance_defaults_to_no_explicit_temperature(cli_env):
+    cli_env.set_advance = AsyncMock()
+    assert _run_cli(cli_env, ["advance", "h1", "a1"]) == 2
+    code = _run_cli(cli_env, ["advance", "h1", "a1", "--yes"])
+    assert code == 0
+    assert cli_env.set_advance.call_args.kwargs["temperature"] is None
 
 
 def test_api_error_exits_1(cli_env, capsys):

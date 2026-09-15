@@ -9,9 +9,14 @@ def test_default_capabilities_enable_common_controls():
     caps = capabilities_for()
     assert caps.boost is True
     assert caps.away is True
+    assert caps.advance is True
     assert caps.open_window is True
     assert "boost" in caps.climate_presets()
     assert caps.setback_write is False
+    # The app's mode carousels are 7–30 °C.
+    assert caps.min_temp == 7.0
+    assert caps.max_temp == 30.0
+    assert caps.frost_temp == 7.0
 
 
 def test_quantum_storage_from_type_name():
@@ -70,6 +75,8 @@ def test_product_catalogue_type_name():
     caps = capabilities_for(product=product)
     assert caps.hot_water is True
     assert caps.climate is False
+    # No comfort schedule to advance into on a cylinder.
+    assert caps.advance is False
 
 
 def test_as_dict_includes_presets():

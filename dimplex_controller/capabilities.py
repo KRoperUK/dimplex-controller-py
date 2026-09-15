@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .const import FROST_TEMPERATURE, MODE_TEMP_MAX, MODE_TEMP_MIN
 from .models import Appliance, ApplianceStatus, AutomaticProvisioning, ProductModel
 
 # Default boost lengths (minutes) offered by the mobile app for most heaters.
@@ -27,18 +28,20 @@ class ApplianceCapabilities:
 
     boost: bool = True
     away: bool = True
+    advance: bool = True
     open_window: bool = True
     eco_start: bool = True
     setback_read: bool = True
     setback_write: bool = False  # no confirmed write API yet
-    frost: bool = True  # TimerMode.FROST_PROTECTION
+    frost: bool = True  # ApplianceModeFlag.FROST_PROTECT (the app's "off")
     timer: bool = True
     energy_meter: bool = False
     storage: bool = False
     hot_water: bool = False
     climate: bool = True
-    min_temp: float = 5.0
-    max_temp: float = 30.0
+    min_temp: float = MODE_TEMP_MIN
+    max_temp: float = MODE_TEMP_MAX
+    frost_temp: float = FROST_TEMPERATURE
     default_boost_minutes: int = DEFAULT_BOOST_MINUTES
     boost_durations: tuple[int, ...] = DEFAULT_BOOST_DURATIONS
 
@@ -58,6 +61,7 @@ class ApplianceCapabilities:
         return {
             "boost": self.boost,
             "away": self.away,
+            "advance": self.advance,
             "open_window": self.open_window,
             "eco_start": self.eco_start,
             "setback_read": self.setback_read,
@@ -70,6 +74,7 @@ class ApplianceCapabilities:
             "climate": self.climate,
             "min_temp": self.min_temp,
             "max_temp": self.max_temp,
+            "frost_temp": self.frost_temp,
             "default_boost_minutes": self.default_boost_minutes,
             "boost_durations": list(self.boost_durations),
             "climate_presets": self.climate_presets(),
@@ -134,11 +139,12 @@ def capabilities_for(
     if any(k in tokens for k in ("quantum", "storage", "qrad", "charge")):
         storage = True
         energy_meter = True
-    if any(k in tokens for k in ("hot water", "hotwater", "cylinder", "dhw")):
+    if any(k in tokens for k in ("hot water", "hotwater", "cylinder", "dhw", "waterheater")):
         hot_water = True
 
     boost = True
     away = True
+    advance = True
     open_window = True
     eco_start = True
     setback_read = True
@@ -162,9 +168,15 @@ def capabilities_for(
         if status.RoomTemperature is not None or status.ActiveSetPointTemperature is not None:
             climate = True
 
+    # Advance only means something for a scheduled room heater; a cylinder has
+    # no "next comfort period" to jump to.
+    if hot_water and not climate:
+        advance = False
+
     return ApplianceCapabilities(
         boost=boost,
         away=away,
+        advance=advance,
         open_window=open_window,
         eco_start=eco_start,
         setback_read=setback_read,

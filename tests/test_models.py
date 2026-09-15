@@ -1,15 +1,77 @@
 """Tests for data models."""
 
+from dimplex_controller.const import NO_SETPOINT_SENTINEL
 from dimplex_controller.models import (
     Appliance,
+    ApplianceModeFlag,
     ApplianceModeSettings,
     ApplianceStatus,
     Hub,
+    HygieneFrequency,
+    SetbackStatus,
     TimerModeSettings,
     TimerPeriod,
     UserContext,
     Zone,
 )
+
+
+def _status(**kwargs) -> ApplianceStatus:
+    return ApplianceStatus(HubId="h1", ApplianceId="a1", ZoneId="z1", **kwargs)
+
+
+def test_appliance_mode_flag_values_match_the_app():
+    """EApplianceModes values recovered from Dimplex Control APK 2.26.0."""
+    assert int(ApplianceModeFlag.TIMER_MODE) == 1
+    assert int(ApplianceModeFlag.BOOST) == 2
+    assert int(ApplianceModeFlag.AWAY) == 4
+    assert int(ApplianceModeFlag.HOLIDAY) == 8
+    assert int(ApplianceModeFlag.ADVANCE) == 16
+    assert int(ApplianceModeFlag.FROST_PROTECT) == 32
+    assert int(ApplianceModeFlag.ECO) == 64
+    assert int(ApplianceModeFlag.MANUAL) == 128
+    assert int(ApplianceModeFlag.HYGIENE) == 256
+    assert int(ApplianceModeFlag.NORMAL) == 8192
+    assert int(ApplianceModeFlag.STANDBY) == 16384
+
+
+def test_supporting_enum_values():
+    assert int(SetbackStatus.DSM_MODE) == 2
+    assert int(HygieneFrequency.WEEKLY) == 7
+    assert int(HygieneFrequency.MONTHLY) == 28
+
+
+def test_boost_is_read_from_the_boost_bit_not_the_duration():
+    """modes=3 is Timer+Boost; a stale duration alone must not read as boost."""
+    assert _status(ApplianceModes=3, BoostDuration=30).is_boost_active is True
+    assert _status(ApplianceModes=1, BoostDuration=30).is_boost_active is False
+    # Advance (16) is not Boost — this was the bug behind hass#163.
+    assert _status(ApplianceModes=17).is_boost_active is False
+    assert _status(ApplianceModes=17).is_advance_active is True
+    # No ApplianceModes reported at all: fall back to the duration.
+    assert _status(BoostDuration=30).is_boost_active is True
+
+
+def test_away_is_read_from_the_away_bit():
+    """modes=5 is Timer+Away; FrostProtect (32) is a different mode."""
+    assert _status(ApplianceModes=5).is_away_active is True
+    assert _status(ApplianceModes=33).is_away_active is False
+    assert _status(ApplianceModes=33).is_frost_protect_active is True
+    # Stale away-until date with the bit clear must not read as away.
+    assert _status(ApplianceModes=1, AwayDateTime="2026-12-24T00:00:00").is_away_active is False
+    # Unknown modes: fall back to the date.
+    assert _status(AwayDateTime="2026-12-24T00:00:00").is_away_active is True
+
+
+def test_active_modes_names_engaged_bits():
+    assert _status(ApplianceModes=3).active_modes == ["TIMER_MODE", "BOOST"]
+    assert _status().active_modes == []
+
+
+def test_active_setpoint_filters_the_no_setpoint_sentinel():
+    assert _status(ActiveSetPointTemperature=21.0).active_setpoint_temperature == 21.0
+    assert _status(ActiveSetPointTemperature=NO_SETPOINT_SENTINEL).active_setpoint_temperature is None
+    assert _status().active_setpoint_temperature is None
 
 
 def test_hub_model():
@@ -221,7 +283,8 @@ def test_appliance_mode_settings_full():
         Frequency=2,
     )
     assert settings.ApplianceModes == 5
-    assert settings.Temperature == 24.5
+    # The wire field is a short, so fractional degrees are rounded.
+    assert settings.Temperature == 24
     assert settings.Time == 120
     assert settings.NumberOfDays == 7
     assert settings.Frequency == 2

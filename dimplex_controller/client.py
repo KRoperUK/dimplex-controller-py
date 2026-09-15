@@ -13,6 +13,9 @@ from .auth import AuthManager, TokenBundle, TokenListener
 from .capabilities import ApplianceCapabilities, capabilities_for
 from .const import (
     BASE_URL,
+    DEFAULT_AWAY_TEMPERATURE,
+    DEFAULT_BOOST_TEMPERATURE,
+    FROST_TEMPERATURE,
     HEADER_APP_NAME,
     HEADER_APP_VERSION,
     HEADER_DEVICE_MANUFACTURER,
@@ -21,12 +24,15 @@ from .const import (
     HEADER_DEVICE_VERSION,
     HEADER_USER_AGENT,
     HTTP_OK,
+    NO_SETPOINT_SENTINEL,
+    NULL_DATETIME,
 )
 from .exceptions import DimplexApiError, DimplexConnectionError
 from .models import (
     Appliance,
     ApplianceModeFlag,
     ApplianceModeSettings,
+    ApplianceModeStatus,
     ApplianceStatus,
     Hub,
     ProductModel,
@@ -79,6 +85,22 @@ def _iso_utc_days_ago(days: int) -> str:
     """Return an ISO-8601 UTC timestamp ``days`` before now (no microseconds)."""
     dt = datetime.now(timezone.utc) - timedelta(days=days)
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _iso_away_until(until: datetime | str | None) -> str:
+    """Normalise an Away "away until" value into the wire ``Date`` format.
+
+    The cloud expects a naive .NET ``DateTime`` string, so aware datetimes are
+    converted to UTC and the offset dropped. ``None`` yields the .NET
+    ``default(DateTime)`` sentinel the app sends when no date applies.
+    """
+    if until is None:
+        return NULL_DATETIME
+    if isinstance(until, str):
+        return until
+    if until.tzinfo is not None:
+        until = until.astimezone(timezone.utc).replace(tzinfo=None)
+    return until.replace(microsecond=0).isoformat()
 
 
 class DimplexControl:
@@ -360,9 +382,15 @@ class DimplexControl:
         return settings
 
     async def set_mode(self, hub_id: str, appliance_id: str, mode: int | TimerMode) -> None:
-        """Set the timer / operation mode.
+        """Set the timer / operation mode by rewriting ``TimerModeSettings``.
 
         See :class:`~dimplex_controller.models.TimerMode` for known values.
+
+        .. warning::
+           ``SetTimerMode`` is the *schedule editor* endpoint. Quantum (and
+           likely other storage models) reject using it to change mode with
+           **HTTP 403**. To turn a heater off use :meth:`set_frost_protect` /
+           :meth:`turn_off`.
         """
         current = await self.get_appliance_features(hub_id, appliance_id)
         current.TimerMode = int(mode)
@@ -418,18 +446,20 @@ class DimplexControl:
         raise ValueError(f"No timer period for day={period.DayOfWeek} start={key_start!r} on appliance {appliance_id}")
 
     async def set_target_temperature(self, hub_id: str, appliance_id: str, temp: float) -> None:
-        """Set the target / comfort temperature for an appliance.
+        """Set the target temperature by **rewriting the timer schedule**.
 
-        The Dimplex cloud stores setpoints on timer periods. This method:
+        .. warning::
+           Quantum rejects this write with **HTTP 403**
+           (dimplex-controller-hass#149) — ``SetTimerMode`` is the schedule
+           editor, not a setpoint RPC.
+
+        It:
 
         1. Loads the current timer configuration.
         2. Updates every period's temperature (preserving day/time windows).
         3. If no periods exist (common for some Quantum configs), installs a
            full-week 00:00–23:59 schedule at the requested temperature in
            manual mode so the cloud has a concrete setpoint to apply.
-
-        This matches the reverse-engineered mobile-app approach of rewriting
-        the active schedule rather than a dedicated "set temperature" RPC.
 
         **Note:** unlike :meth:`set_period_setpoint`, this updates *all* period
         temperatures (or installs a full-week schedule). Use the period helpers
@@ -457,7 +487,14 @@ class DimplexControl:
     async def set_appliance_mode(
         self, hub_id: str, appliance_ids: list[str], mode_settings: ApplianceModeSettings
     ) -> None:
-        """Set appliance mode (Boost, Away, etc.)."""
+        """POST ``ApplianceModeSettings`` to ``/RemoteControl/SetApplianceMode``.
+
+        This is the low-level escape hatch. Prefer the typed helpers
+        (:meth:`set_boost`, :meth:`set_away`, :meth:`set_frost_protect`,
+        :meth:`set_advance`, :meth:`set_manual`, :meth:`set_eco_mode`) which
+        fill the correct fields for each mode, or :meth:`set_mode_flag` to
+        target an arbitrary single bit.
+        """
         payload = {
             "Settings": mode_settings.model_dump(mode="json"),
             "HubId": hub_id,
@@ -465,29 +502,66 @@ class DimplexControl:
         }
         await self._request("POST", "/RemoteControl/SetApplianceMode", json=payload)
 
+    async def set_mode_flag(
+        self,
+        hub_id: str,
+        appliance_ids: list[str],
+        mode: ApplianceModeFlag,
+        *,
+        enable: bool = True,
+        temperature: float | None = None,
+        minutes: int = 0,
+        until: datetime | str | None = None,
+        number_of_days: int = 0,
+    ) -> None:
+        """Engage or clear a single :class:`ApplianceModeFlag`.
+
+        Mirrors how the app builds ``ApplianceModeSettings``: only the fields
+        relevant to ``mode`` are populated, and a clear (``enable=False``)
+        sends ``Status=0`` with the ancillary fields zeroed.
+        """
+        settings = ApplianceModeSettings(
+            ApplianceModes=int(mode),
+            Status=int(ApplianceModeStatus.ACTIVE if enable else ApplianceModeStatus.INACTIVE),
+            Temperature=int(round(temperature)) if temperature is not None else 0,
+            Time=int(minutes) if enable else 0,
+            Date=_iso_away_until(until) if enable else NULL_DATETIME,
+            NumberOfDays=int(number_of_days) if enable else 0,
+        )
+        await self.set_appliance_mode(hub_id, appliance_ids, settings)
+
     async def set_boost(
         self,
         hub_id: str,
         appliance_ids: list[str],
         *,
-        temperature: float,
+        temperature: float = DEFAULT_BOOST_TEMPERATURE,
         duration_minutes: int = DEFAULT_BOOST_MINUTES,
         enable: bool = True,
     ) -> None:
-        """Enable or disable Boost for one or more appliances.
+        """Enable or disable timed Boost for one or more appliances.
 
-        The mobile app uses ``ApplianceModes=16`` with ``Status=1`` (on) /
-        ``Status=0`` (off). ``Time`` carries the boost duration in minutes.
+        Sends ``ApplianceModes=2`` (:attr:`~dimplex_controller.ApplianceModeFlag.BOOST`)
+        with ``Status=1`` (on) / ``Status=0`` (off); ``Time`` carries the boost
+        duration in minutes and ``Temperature`` the boost target (7–30 °C).
+
+        .. versionchanged:: 0.13.0
+           Previously sent ``ApplianceModes=16``, which is **Advance** — the
+           appliance advanced its schedule instead of boosting, and the
+           requested duration was discarded.
         """
-        settings = ApplianceModeSettings(
-            ApplianceModes=int(ApplianceModeFlag.BOOST),
-            Status=1 if enable else 0,
-            Temperature=float(temperature),
-            Time=int(duration_minutes) if enable else 0,
+        await self.set_mode_flag(
+            hub_id,
+            appliance_ids,
+            ApplianceModeFlag.BOOST,
+            enable=enable,
+            temperature=temperature,
+            minutes=int(duration_minutes) if enable else 0,
         )
-        await self.set_appliance_mode(hub_id, appliance_ids, settings)
 
-    async def clear_boost(self, hub_id: str, appliance_ids: list[str], *, temperature: float = 21.0) -> None:
+    async def clear_boost(
+        self, hub_id: str, appliance_ids: list[str], *, temperature: float = DEFAULT_BOOST_TEMPERATURE
+    ) -> None:
         """Disable Boost for the given appliances."""
         await self.set_boost(hub_id, appliance_ids, temperature=temperature, duration_minutes=0, enable=False)
 
@@ -496,27 +570,135 @@ class DimplexControl:
         hub_id: str,
         appliance_ids: list[str],
         *,
-        temperature: float,
+        temperature: float = DEFAULT_AWAY_TEMPERATURE,
         enable: bool = True,
+        until: datetime | str | None = None,
         number_of_days: int = 0,
     ) -> None:
         """Enable or disable Away mode.
 
-        Uses ``ApplianceModes=32`` (best-effort; confirmed via status-frame
-        pairing with Away* fields). Prefer verifying on a live appliance
-        after firmware updates.
-        """
-        settings = ApplianceModeSettings(
-            ApplianceModes=int(ApplianceModeFlag.AWAY),
-            Status=1 if enable else 0,
-            Temperature=float(temperature),
-            NumberOfDays=int(number_of_days) if enable else 0,
-        )
-        await self.set_appliance_mode(hub_id, appliance_ids, settings)
+        Sends ``ApplianceModes=4`` (:attr:`~dimplex_controller.ApplianceModeFlag.AWAY`).
+        Away is a *settable* setback: the app offers 7–30 °C and defaults to the
+        7 °C anti-freeze floor, so a low ``temperature`` is the normal case
+        rather than a bug.
 
-    async def clear_away(self, hub_id: str, appliance_ids: list[str], *, temperature: float = 16.0) -> None:
+        ``until`` is the "away until" datetime the app sends in ``Date``. Pass a
+        :class:`~datetime.datetime` or an ISO-8601 string. ``number_of_days`` is
+        retained for backwards compatibility and, when ``until`` is omitted, is
+        converted into an equivalent ``Date``.
+
+        .. versionchanged:: 0.13.0
+           Previously sent ``ApplianceModes=32``, which is **FrostProtect** —
+           the appliance was pinned to the fixed 7 °C frost setpoint and the
+           requested away target was ignored (dimplex-controller-hass#163).
+           Away duration now travels in ``Date`` as the app does, not only in
+           ``NumberOfDays``.
+        """
+        days = int(number_of_days)
+        if until is None and days > 0:
+            until = datetime.now(timezone.utc) + timedelta(days=days)
+        await self.set_mode_flag(
+            hub_id,
+            appliance_ids,
+            ApplianceModeFlag.AWAY,
+            enable=enable,
+            temperature=temperature,
+            until=until,
+            number_of_days=days,
+        )
+
+    async def clear_away(
+        self, hub_id: str, appliance_ids: list[str], *, temperature: float = DEFAULT_AWAY_TEMPERATURE
+    ) -> None:
         """Disable Away mode for the given appliances."""
         await self.set_away(hub_id, appliance_ids, temperature=temperature, enable=False)
+
+    async def set_frost_protect(
+        self,
+        hub_id: str,
+        appliance_ids: list[str],
+        *,
+        enable: bool = True,
+        temperature: float = FROST_TEMPERATURE,
+    ) -> None:
+        """Engage or clear frost protection (``ApplianceModes=32``, temp 7 °C).
+
+        This is how the official app turns a heater **off**: there is no "off"
+        mode, only the anti-freeze floor. Use this instead of writing
+        ``TimerMode`` — Quantum rejects ``SetTimerMode`` with HTTP 403.
+        """
+        await self.set_mode_flag(
+            hub_id,
+            appliance_ids,
+            ApplianceModeFlag.FROST_PROTECT,
+            enable=enable,
+            temperature=temperature,
+        )
+
+    async def turn_off(self, hub_id: str, appliance_ids: list[str]) -> None:
+        """Turn appliances off the way the app does — frost protection at 7 °C."""
+        await self.set_frost_protect(hub_id, appliance_ids, enable=True)
+
+    async def set_advance(
+        self,
+        hub_id: str,
+        appliance_ids: list[str],
+        *,
+        enable: bool = True,
+        temperature: float | None = None,
+    ) -> None:
+        """Advance to the next schedule period (``ApplianceModes=16``).
+
+        ``temperature`` is the current/next period's setpoint. Quantum and
+        Storage Heater models with no setback expect the ``255`` "no explicit
+        setpoint" sentinel, which is the default when ``temperature`` is
+        omitted.
+        """
+        await self.set_mode_flag(
+            hub_id,
+            appliance_ids,
+            ApplianceModeFlag.ADVANCE,
+            enable=enable,
+            temperature=NO_SETPOINT_SENTINEL if temperature is None else temperature,
+        )
+
+    async def set_manual(
+        self,
+        hub_id: str,
+        appliance_ids: list[str],
+        *,
+        temperature: float,
+        enable: bool = True,
+    ) -> None:
+        """Hold a manual setpoint (``ApplianceModes=128``, 7–30 °C)."""
+        await self.set_mode_flag(
+            hub_id,
+            appliance_ids,
+            ApplianceModeFlag.MANUAL,
+            enable=enable,
+            temperature=temperature,
+        )
+
+    async def set_eco_mode(
+        self,
+        hub_id: str,
+        appliance_ids: list[str],
+        *,
+        temperature: float,
+        enable: bool = True,
+    ) -> None:
+        """Engage Eco mode (``ApplianceModes=64``).
+
+        Not the same as :meth:`set_eco_start`, which toggles the EcoStart
+        pre-heat *setting* rather than engaging a mode.
+        """
+        await self.set_mode_flag(
+            hub_id,
+            appliance_ids,
+            ApplianceModeFlag.ECO,
+            enable=enable,
+            temperature=temperature,
+        )
 
     async def set_eco_start(self, hub_id: str, appliance_ids: list[str], enable: bool) -> None:
         """Enable/Disable EcoStart."""
