@@ -40,11 +40,13 @@ The app's mode bitfield (`DimplexControl.Models.EApplianceModes`, `[Flags]`):
 | `Eco` | `64` (0x40) | | `Normal` | `8192` (0x2000) |
 | | | | `Standby` | `16384` (0x4000) |
 
-> ⚠️ **`dimplex_controller` is wrong here.** `ApplianceModeFlag` uses `BOOST = 16`
-> and `AWAY = 32`, but **16 is `Advance`** and **32 is `FrostProtect`**. That is
-> the root cause of dimplex-controller-hass#163 (Away → Frost Protect, Boost →
-> Advance). Correct values are **`Boost = 2`, `Away = 4`**. Status-frame parsing
-> (`is_boost_active`/`is_away_active`) must check the same corrected bits.
+> ⚠️ **`dimplex_controller` was wrong here.** Before 0.13.0 `ApplianceModeFlag`
+> used `BOOST = 16` and `AWAY = 32`, but **16 is `Advance`** and **32 is
+> `FrostProtect`**. That is the root cause of dimplex-controller-hass#163
+> (Away → Frost Protect, Boost → Advance). Correct values are **`Boost = 2`,
+> `Away = 4`**. Status-frame parsing (`is_boost_active`/`is_away_active`) must
+> check the same corrected bits. **Fixed in 0.13.0** — the library now defines
+> the full flag set and reads status from the corrected bits.
 
 Supporting enums:
 
@@ -165,7 +167,7 @@ in 2.26.0; see the app for exact request shapes.
 
 ## 3. Cross-reference matrix — library vs APK 2.26.0 vs live
 
-| Behaviour | `dimplex_controller` today | 📦 APK 2.26.0 | 🔬 Live QM100RF (2026-09-15) |
+| Behaviour | `dimplex_controller` **before 0.13.0** | 📦 APK 2.26.0 | 🔬 Live QM100RF (2026-09-15) |
 | --- | --- | --- | --- |
 | **Boost flag** | ❌ `16` (= Advance) | ✅ `Boost = 2` | ✅ `modes→3`, `BoostDuration=30` applied |
 | **Away flag** | ❌ `32` (= FrostProtect) | ✅ `Away = 4` | ✅ `modes→5`, `is_away` set |
@@ -183,6 +185,26 @@ in 2.26.0; see the app for exact request shapes.
 | HWC boost/normal/hygiene | ❌ missing | ✅ `Set*Hwc` endpoints | ❌ not owned |
 | Heat-pump HWC | ❌ missing | ✅ `*HeatPumpHwc` endpoints | ❌ not owned |
 | Energy report | ✅ `GetTsiEnergyReportDataForHub` | ✅ | ✅ (prior) |
+
+### What 0.13.0 changed
+
+Every ❌ in the "before 0.13.0" column above is now addressed:
+
+| Finding | Now in the library |
+| --- | --- |
+| Boost/Away flag values | `ApplianceModeFlag` carries the full `EApplianceModes` set; `set_boost` → 2, `set_away` → 4 |
+| Away duration | `set_away(until=...)` writes `Date`; `number_of_days` is converted to a date |
+| Status parsing | `is_boost_active` / `is_away_active` read the corrected bits; `is_frost_protect_active`, `is_advance_active`, `is_timer_active`, `is_manual_active`, `is_eco_active`, `active_modes` added |
+| `0xFF` sentinel | `ApplianceStatus.active_setpoint_temperature` filters 255; `set_advance` sends it by default |
+| Target temperature | `set_appliance_setpoint_temperature()`; `set_target_temperature()` deprecated |
+| "Off" | `set_frost_protect()` / `turn_off()` |
+| Advance / Manual / Eco modes | `set_advance()`, `set_manual()`, `set_eco_mode()` |
+| Setback write | `set_setback_temperature()`; capability `setback_write=True` |
+| HWC / heat-pump HWC | `set_hot_water_*`, `get/set_heat_pump_hot_water_schedule` — implemented but ❌ untested |
+| Temperature range | `MODE_TEMP_MIN`/`MAX` = 7–30 °C; capability `min_temp` corrected from 5 → 7 |
+
+Still open: whether a *raised* Away target (>7) is honoured on Quantum, and live
+validation of `SetSetbackTemperature` and the entire HWC surface.
 
 ### Live-validation notes (QM100RF, developer hardware)
 

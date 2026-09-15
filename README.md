@@ -150,20 +150,43 @@ for status in status_list:
 ### Sending control commands
 
 ```python
-from dimplex_controller.models import ApplianceModeSettings
-
 # Enable EcoStart
 await client.set_eco_start(hub_id, [appliance_id], True)
 
 # Enable Open Window Detection
 await client.set_open_window_detection(hub_id, [appliance_id], True)
 
-# Activate Boost
+# Timed Boost (ApplianceModes=2, Time = minutes)
 await client.set_boost(hub_id, [appliance_id], temperature=25.0, duration_minutes=60)
 
-# Set target temperature (rewrites timer period setpoints)
-await client.set_target_temperature(hub_id, appliance_id, 21.5)
+# Away until a given moment (ApplianceModes=4). Away is a settable 7–30 °C
+# setback and defaults to the 7 °C anti-freeze floor.
+from datetime import datetime, timedelta, timezone
+
+await client.set_away(
+    hub_id,
+    [appliance_id],
+    temperature=12.0,
+    until=datetime.now(timezone.utc) + timedelta(days=3),
+)
+
+# Set the target temperature — dedicated endpoint, leaves the schedule alone
+await client.set_appliance_setpoint_temperature(hub_id, [appliance_id], 21.5)
+
+# Turn off the way the app does: frost protection at 7 °C
+await client.turn_off(hub_id, [appliance_id])
 ```
+
+> **Mode flag values matter.** `EApplianceModes` is a bitfield where Boost is `2`
+> and Away is `4`; `16` is Advance and `32` is FrostProtect. Releases before
+> 0.13.0 had these wrong, so Boost silently became Advance and Away became a
+> fixed 7 °C frost hold. If you hand-build `ApplianceModeSettings`, use
+> `ApplianceModeFlag`. See
+> [docs/decompiled-api-reference.md](docs/decompiled-api-reference.md).
+>
+> **Avoid `SetTimerMode` for control.** `set_mode()` and the deprecated
+> `set_target_temperature()` rewrite the schedule; Quantum rejects that with
+> HTTP 403. Use `set_appliance_setpoint_temperature()` and `turn_off()`.
 
 ### Energy reports
 
@@ -206,16 +229,23 @@ Main client class. Construct with an `aiohttp.ClientSession` and a `refresh_toke
 | `get_user_context()` | Returns `UserContext`. |
 | `get_product_models()` | Returns `list[ProductModel]` (cacheable). |
 | `get_schedule(hub_id, appliance_id)` | Returns `TimerModeSettings` (timer + periods). |
-| `set_mode(hub_id, appliance_id, mode)` | Change timer/operation mode. |
-| `set_target_temperature(hub_id, appliance_id, temp)` | Rewrite all period setpoints or install full-week schedule. |
+| `set_mode(hub_id, appliance_id, mode)` | Rewrite `TimerMode`. **403 on Quantum** — prefer `turn_off`. |
+| `set_target_temperature(hub_id, appliance_id, temp)` | Deprecated: rewrites period setpoints. Prefer `set_appliance_setpoint_temperature`. |
+| `set_appliance_setpoint_temperature(hub_id, appliance_ids, temperature)` | Preferred setpoint path; non-destructive. |
 | `set_period_setpoint(...)` | Update one timer period without clobbering siblings. |
 | `update_period(...)` | Replace a timer period matched by day + start time. |
-| `set_boost(hub_id, appliance_ids, *, temperature, duration_minutes, enable)` | Enable/disable Boost. |
+| `copy_schedule_to_appliances(...)` | Copy one appliance's schedule onto others. |
+| `set_boost(hub_id, appliance_ids, *, temperature, duration_minutes, enable)` | Timed Boost (`ApplianceModes=2`). |
 | `clear_boost(hub_id, appliance_ids)` | Disable Boost. |
-| `set_away(hub_id, appliance_ids, *, temperature, enable, number_of_days)` | Enable/disable Away. |
+| `set_away(hub_id, appliance_ids, *, temperature, enable, until, number_of_days)` | Away setback (`ApplianceModes=4`). |
 | `clear_away(hub_id, appliance_ids)` | Disable Away. |
+| `set_frost_protect(...)` / `turn_off(...)` | Frost protection at 7 °C — the app's "off". |
+| `set_advance(...)` | Advance to the next schedule period. |
+| `set_manual(...)` / `set_eco_mode(...)` | Manual / Eco mode holds. |
+| `set_setback_temperature(...)` | Write the setback temperature (untested). |
 | `set_eco_start(hub_id, appliance_ids, enable)` | Toggle EcoStart. |
 | `set_open_window_detection(hub_id, appliance_ids, enable)` | Toggle Open Window Detection. |
+| `set_hot_water_*(...)` / `*_heat_pump_hot_water_schedule(...)` | Hot-water cylinder surface (untested — no hardware). |
 | `get_tsi_energy_report(hub_id, ...)` | Returns `TsiEnergyReport`. |
 | `capabilities_for(appliance, *, status, product)` | Derive an `ApplianceCapabilities` matrix. |
 | `export_tokens()` / `apply_tokens(bundle)` | Token persistence helpers. |
