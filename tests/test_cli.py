@@ -72,8 +72,10 @@ def test_parser_has_all_commands():
         "boost",
         "away",
         "eco",
+        "setpoint",
         "off",
         "advance",
+        "setback",
     }
 
 
@@ -268,6 +270,14 @@ def test_away_passes_duration_options(cli_env):
     assert kwargs["until"] is None
 
 
+def test_setpoint_uses_the_dedicated_endpoint(cli_env):
+    cli_env.set_appliance_setpoint_temperature = AsyncMock()
+    assert _run_cli(cli_env, ["setpoint", "h1", "a1"]) == 2
+    code = _run_cli(cli_env, ["setpoint", "h1", "a1", "--yes", "--temperature", "22"])
+    assert code == 0
+    cli_env.set_appliance_setpoint_temperature.assert_awaited_once_with("h1", ["a1"], 22.0)
+
+
 def test_off_engages_frost_protection(cli_env):
     cli_env.set_frost_protect = AsyncMock()
     assert _run_cli(cli_env, ["off", "h1", "a1"]) == 2
@@ -282,6 +292,14 @@ def test_advance_defaults_to_no_explicit_temperature(cli_env):
     code = _run_cli(cli_env, ["advance", "h1", "a1", "--yes"])
     assert code == 0
     assert cli_env.set_advance.call_args.kwargs["temperature"] is None
+
+
+def test_setback_maps_clear_to_inactive_status(cli_env):
+    cli_env.set_setback_temperature = AsyncMock()
+    assert _run_cli(cli_env, ["setback", "h1", "a1"]) == 2
+    code = _run_cli(cli_env, ["setback", "h1", "a1", "--yes", "--temperature", "16", "--clear"])
+    assert code == 0
+    assert int(cli_env.set_setback_temperature.call_args.kwargs["status"]) == 0
 
 
 def test_api_error_exits_1(cli_env, capsys):

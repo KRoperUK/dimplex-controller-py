@@ -35,7 +35,9 @@ from .models import (
     ApplianceModeStatus,
     ApplianceStatus,
     Hub,
+    HygieneFrequency,
     ProductModel,
+    SetbackStatus,
     TimerMode,
     TimerModeSettings,
     TimerPeriod,
@@ -390,7 +392,8 @@ class DimplexControl:
            ``SetTimerMode`` is the *schedule editor* endpoint. Quantum (and
            likely other storage models) reject using it to change mode with
            **HTTP 403**. To turn a heater off use :meth:`set_frost_protect` /
-           :meth:`turn_off`.
+           :meth:`turn_off`; to change the setpoint use
+           :meth:`set_appliance_setpoint_temperature`.
         """
         current = await self.get_appliance_features(hub_id, appliance_id)
         current.TimerMode = int(mode)
@@ -448,12 +451,15 @@ class DimplexControl:
     async def set_target_temperature(self, hub_id: str, appliance_id: str, temp: float) -> None:
         """Set the target temperature by **rewriting the timer schedule**.
 
-        .. warning::
-           Quantum rejects this write with **HTTP 403**
-           (dimplex-controller-hass#149) — ``SetTimerMode`` is the schedule
-           editor, not a setpoint RPC.
+        .. deprecated:: 0.13.0
+           Prefer :meth:`set_appliance_setpoint_temperature`, the dedicated
+           endpoint the app uses. It applies immediately, does not touch the
+           stored schedule, and works on Quantum — which rejects the
+           ``SetTimerMode`` write this method performs with **HTTP 403**
+           (dimplex-controller-hass#149).
 
-        It:
+        Retained for models where rewriting the schedule genuinely is the
+        intended mechanism. It:
 
         1. Loads the current timer configuration.
         2. Updates every period's temperature (preserving day/time windows).
@@ -492,8 +498,7 @@ class DimplexControl:
         This is the low-level escape hatch. Prefer the typed helpers
         (:meth:`set_boost`, :meth:`set_away`, :meth:`set_frost_protect`,
         :meth:`set_advance`, :meth:`set_manual`, :meth:`set_eco_mode`) which
-        fill the correct fields for each mode, or :meth:`set_mode_flag` to
-        target an arbitrary single bit.
+        fill the correct fields for each mode.
         """
         payload = {
             "Settings": mode_settings.model_dump(mode="json"),
@@ -513,6 +518,8 @@ class DimplexControl:
         minutes: int = 0,
         until: datetime | str | None = None,
         number_of_days: int = 0,
+        frequency: int | HygieneFrequency = 0,
+        endpoint: str = "/RemoteControl/SetApplianceMode",
     ) -> None:
         """Engage or clear a single :class:`ApplianceModeFlag`.
 
@@ -527,8 +534,14 @@ class DimplexControl:
             Time=int(minutes) if enable else 0,
             Date=_iso_away_until(until) if enable else NULL_DATETIME,
             NumberOfDays=int(number_of_days) if enable else 0,
+            Frequency=int(frequency) if enable else 0,
         )
-        await self.set_appliance_mode(hub_id, appliance_ids, settings)
+        payload = {
+            "Settings": settings.model_dump(mode="json"),
+            "HubId": hub_id,
+            "ApplianceIds": appliance_ids,
+        }
+        await self._request("POST", endpoint, json=payload)
 
     async def set_boost(
         self,
@@ -700,6 +713,52 @@ class DimplexControl:
             temperature=temperature,
         )
 
+    async def set_appliance_setpoint_temperature(
+        self, hub_id: str, appliance_ids: list[str], temperature: float
+    ) -> None:
+        """Set the active setpoint via ``/RemoteControl/SetApplianceSetpointTemperature``.
+
+        This is the dedicated, non-destructive setpoint endpoint the app uses:
+        it applies a target immediately and leaves the stored schedule periods
+        untouched. Prefer it over :meth:`set_target_temperature`, which rewrites
+        the schedule and is rejected with HTTP 403 on Quantum.
+
+        ``Temperature`` is a wire ``byte``, so the value is rounded to whole
+        degrees.
+        """
+        payload = {
+            "HubId": hub_id,
+            "ApplianceIds": appliance_ids,
+            "Temperature": int(round(temperature)),
+        }
+        await self._request("POST", "/RemoteControl/SetApplianceSetpointTemperature", json=payload)
+
+    async def set_setback_temperature(
+        self,
+        hub_id: str,
+        appliance_ids: list[str],
+        *,
+        temperature: float,
+        status: int | SetbackStatus = SetbackStatus.ACTIVE,
+    ) -> None:
+        """Write the setback temperature (``/RemoteControl/SetSetbackTemperature``).
+
+        ``status`` is an :class:`~dimplex_controller.SetbackStatus` byte —
+        ``ACTIVE``/``INACTIVE`` for a plain setback, with ``DSM_MODE`` and
+        ``LOCAL_FREQUENCY_CONTROL_ACTIVE`` reserved for demand-side-management
+        use.
+
+        Confirmed present in APK 2.26.0 but **not yet validated on live
+        hardware**.
+        """
+        payload = {
+            "HubId": hub_id,
+            "ApplianceIds": appliance_ids,
+            "Status": int(status),
+            "Temperature": int(round(temperature)),
+        }
+        await self._request("POST", "/RemoteControl/SetSetbackTemperature", json=payload)
+
     async def set_eco_start(self, hub_id: str, appliance_ids: list[str], enable: bool) -> None:
         """Enable/Disable EcoStart."""
         payload = {"Enable": enable, "HubId": hub_id, "ApplianceIds": appliance_ids}
@@ -709,6 +768,141 @@ class DimplexControl:
         """Enable/Disable Open Window Detection."""
         payload = {"Enable": enable, "HubId": hub_id, "ApplianceIds": appliance_ids}
         await self._request("POST", "/RemoteControl/SetOpenWindowDetection", json=payload)
+
+    # ------------------------------------------------------------------
+    # Hot-water cylinders (``WaterHeater`` / heat-pump ``ASHW Cylinder``)
+    #
+    # These endpoints are confirmed present in Dimplex Control APK 2.26.0 but
+    # are **untested against live hardware** — the maintainer owns no cylinder.
+    # Treat behaviour as provisional and please report findings upstream.
+    # ------------------------------------------------------------------
+
+    async def set_hot_water_mode(
+        self,
+        hub_id: str,
+        appliance_ids: list[str],
+        mode: ApplianceModeFlag,
+        *,
+        enable: bool = True,
+        temperature: float | None = None,
+        heat_pump: bool = False,
+    ) -> None:
+        """Set a cylinder mode via ``SetApplianceModeHwc`` / ``…HeatPumpHwc``.
+
+        ``heat_pump=True`` targets an ASHW (heat-pump) cylinder.
+
+        .. warning:: Untested — APK-confirmed only.
+        """
+        endpoint = "/RemoteControl/SetApplianceModeHeatPumpHwc" if heat_pump else "/RemoteControl/SetApplianceModeHwc"
+        await self.set_mode_flag(
+            hub_id,
+            appliance_ids,
+            mode,
+            enable=enable,
+            temperature=temperature,
+            endpoint=endpoint,
+        )
+
+    async def set_hot_water_boost_temperature(
+        self, hub_id: str, appliance_ids: list[str], temperature: float, *, enable: bool = True
+    ) -> None:
+        """Set the cylinder Boost temperature (``SetBoostTemperatureHwc``).
+
+        .. warning:: Untested — APK-confirmed only.
+        """
+        await self.set_mode_flag(
+            hub_id,
+            appliance_ids,
+            ApplianceModeFlag.BOOST,
+            enable=enable,
+            temperature=temperature,
+            endpoint="/RemoteControl/SetBoostTemperatureHwc",
+        )
+
+    async def set_hot_water_normal_temperature(
+        self, hub_id: str, appliance_ids: list[str], temperature: float, *, enable: bool = True
+    ) -> None:
+        """Set the cylinder Normal temperature (``SetNormalTemperatureHwc``).
+
+        .. warning:: Untested — APK-confirmed only.
+        """
+        await self.set_mode_flag(
+            hub_id,
+            appliance_ids,
+            ApplianceModeFlag.NORMAL,
+            enable=enable,
+            temperature=temperature,
+            endpoint="/RemoteControl/SetNormalTemperatureHwc",
+        )
+
+    async def set_hot_water_hygiene(
+        self,
+        hub_id: str,
+        appliance_ids: list[str],
+        *,
+        temperature: float,
+        frequency: int | HygieneFrequency = HygieneFrequency.WEEKLY,
+        enable: bool = True,
+        heat_pump: bool = False,
+    ) -> None:
+        """Configure the anti-legionella hygiene cycle.
+
+        ``frequency`` is a :class:`~dimplex_controller.HygieneFrequency`
+        (``OFF``/``DAILY``/``WEEKLY``/``MONTHLY``).
+
+        .. warning:: Untested — APK-confirmed only.
+        """
+        endpoint = (
+            "/RemoteControl/SetHygieneSettingsHeatPumpHwc" if heat_pump else "/RemoteControl/SetHygieneSettingsHwc"
+        )
+        await self.set_mode_flag(
+            hub_id,
+            appliance_ids,
+            ApplianceModeFlag.HYGIENE,
+            enable=enable,
+            temperature=temperature,
+            frequency=frequency,
+            endpoint=endpoint,
+        )
+
+    async def get_heat_pump_hot_water_schedule(self, hub_id: str, appliance_id: str) -> TimerModeSettings:
+        """Read an ASHW cylinder's schedule.
+
+        .. warning:: Untested — APK-confirmed only.
+        """
+        payload = {"HubId": hub_id, "ApplianceId": appliance_id}
+        data = await self._request(
+            "POST",
+            "/RemoteControl/ApiGetTimerModeDetailsForHeatPumpHwcAppliance",
+            json=payload,
+        )
+        return TimerModeSettings.model_validate(data)  # type: ignore[no-any-return]
+
+    async def set_heat_pump_hot_water_schedule(self, settings: TimerModeSettings) -> TimerModeSettings:
+        """Write an ASHW cylinder's schedule periods.
+
+        .. warning:: Untested — APK-confirmed only.
+        """
+        payload = {"TimerModeSettings": settings.model_dump(mode="json")}
+        await self._request("POST", "/RemoteControl/UpdateHeatPumpHwcSchedulePeriods", json=payload)
+        return settings
+
+    async def copy_schedule_to_appliances(
+        self,
+        hub_id: str,
+        from_appliance_id: str,
+        appliance_ids: list[str],
+        *,
+        timer_mode: int | TimerMode = 0,
+    ) -> None:
+        """Copy one appliance's schedule onto others (``CopyScheduleToAppliances``)."""
+        payload = {
+            "HubId": hub_id,
+            "FromApplianceId": from_appliance_id,
+            "ApplianceIds": appliance_ids,
+            "TimerMode": int(timer_mode),
+        }
+        await self._request("POST", "/RemoteControl/CopyScheduleToAppliances", json=payload)
 
     async def get_tsi_energy_report(
         self,

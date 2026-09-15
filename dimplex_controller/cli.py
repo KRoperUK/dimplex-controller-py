@@ -28,6 +28,7 @@ from .auth import TokenBundle
 from .client import DimplexControl
 from .const import DEFAULT_AWAY_TEMPERATURE, DEFAULT_BOOST_TEMPERATURE
 from .exceptions import DimplexError
+from .models import SetbackStatus
 
 _CoroFactory = Callable[[DimplexControl], Awaitable[int]]
 
@@ -201,6 +202,16 @@ async def cmd_eco(client: DimplexControl, args: argparse.Namespace) -> int:
     return 0
 
 
+async def cmd_setpoint(client: DimplexControl, args: argparse.Namespace) -> int:
+    """Set the active setpoint via the dedicated (non-destructive) endpoint."""
+    if not args.yes:
+        print("error: control commands require --yes", file=sys.stderr)
+        return 2
+    await client.set_appliance_setpoint_temperature(args.hub, [args.appliance], args.temperature)
+    print("ok")
+    return 0
+
+
 async def cmd_off(client: DimplexControl, args: argparse.Namespace) -> int:
     """Turn the appliance off the way the app does — frost protection at 7 °C."""
     if not args.yes:
@@ -220,6 +231,20 @@ async def cmd_advance(client: DimplexControl, args: argparse.Namespace) -> int:
         [args.appliance],
         enable=not args.clear,
         temperature=args.temperature,
+    )
+    print("ok")
+    return 0
+
+
+async def cmd_setback(client: DimplexControl, args: argparse.Namespace) -> int:
+    if not args.yes:
+        print("error: control commands require --yes", file=sys.stderr)
+        return 2
+    await client.set_setback_temperature(
+        args.hub,
+        [args.appliance],
+        temperature=args.temperature,
+        status=SetbackStatus.INACTIVE if args.clear else SetbackStatus.ACTIVE,
     )
     print("ok")
     return 0
@@ -271,8 +296,10 @@ def build_parser() -> argparse.ArgumentParser:
         "boost": cmd_boost,
         "away": cmd_away,
         "eco": cmd_eco,
+        "setpoint": cmd_setpoint,
         "off": cmd_off,
         "advance": cmd_advance,
+        "setback": cmd_setback,
     }
 
     for name, help_text, opts in (
@@ -287,8 +314,18 @@ def build_parser() -> argparse.ArgumentParser:
             {"temperature": DEFAULT_AWAY_TEMPERATURE, "away_until": True},
         ),
         ("eco", "Enable or clear EcoStart (--yes required)", {}),
+        (
+            "setpoint",
+            "Set the active setpoint, non-destructive (--yes required)",
+            {"temperature": 21.0},
+        ),
         ("off", "Turn off via frost protection at 7 °C (--yes required)", {}),
         ("advance", "Advance to the next schedule period (--yes required)", {"temperature": None}),
+        (
+            "setback",
+            "Write the setback temperature (--yes required; untested)",
+            {"temperature": 16.0},
+        ),
     ):
         p = sub.add_parser(name, help=help_text)
         p.add_argument("hub")

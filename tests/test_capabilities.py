@@ -12,7 +12,9 @@ def test_default_capabilities_enable_common_controls():
     assert caps.advance is True
     assert caps.open_window is True
     assert "boost" in caps.climate_presets()
-    assert caps.setback_write is False
+    # SetSetbackTemperature and SetApplianceSetpointTemperature both exist.
+    assert caps.setback_write is True
+    assert caps.setpoint_write is True
     # The app's mode carousels are 7–30 °C.
     assert caps.min_temp == 7.0
     assert caps.max_temp == 30.0
@@ -75,8 +77,16 @@ def test_product_catalogue_type_name():
     caps = capabilities_for(product=product)
     assert caps.hot_water is True
     assert caps.climate is False
+    assert caps.hygiene is True
     # No comfort schedule to advance into on a cylinder.
     assert caps.advance is False
+
+
+def test_heat_pump_cylinder_detected():
+    product = ProductModel(ProductModelName="ASHW Cylinder 210", ProductTypeName="HeatPumpHWC")
+    caps = capabilities_for(product=product)
+    assert caps.heat_pump is True
+    assert caps.hot_water is True
 
 
 def test_as_dict_includes_presets():
