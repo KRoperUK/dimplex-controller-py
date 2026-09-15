@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -37,6 +38,29 @@ jobs:
               - 'poetry.lock'
               - '.pre-commit-config.yaml'
               - '.github/workflows/test.yml'
+            docs:
+              - '**/*.md'
+              - 'scripts/check-md-alerts.sh'
+              - '.github/workflows/test.yml'
+
+  # Markdown guard, kept separate from `lint` so a documentation-only PR is still
+  # checked without pulling in ruff/mypy or the Python test matrix — the same
+  # split the integration repo uses.
+  #
+  # A GitHub alert marker that is not alone on its line, or not inside a
+  # blockquote, renders as literal characters with no complaint from GitHub. This
+  # repository's README uses one for the unofficial-project notice, so it is worth
+  # a gate rather than a proof-read.
+  docs:
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Check GitHub alert syntax in Markdown
+        run: bash scripts/check-md-alerts.sh
 
   lint:
     needs: changes
@@ -47,7 +71,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
           cache: pip
@@ -86,7 +110,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
           cache: pip
@@ -117,18 +141,18 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Install Poetry
-        uses: snok/install-poetry@v1
+        uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
         with:
           virtualenvs-create: true
           virtualenvs-in-project: true
 
       - name: Cache venv
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
@@ -143,10 +167,11 @@ jobs:
 
   # Stable required status check for the `main` branch ruleset.
   # - Python/code changes: fails unless lint, pre-commit, and the full test matrix succeed
-  # - Docs-only changes: succeeds without running the heavy jobs
+  # - Docs changes: fails unless the markdown guard succeeds
+  # - Other changes: succeeds without running the heavy jobs
   ci:
     name: ci
-    needs: [changes, lint, pre-commit, test]
+    needs: [changes, docs, lint, pre-commit, test]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -155,17 +180,28 @@ jobs:
         run: |
           set -euo pipefail
           code="${{ needs.changes.outputs.code }}"
+          docs="${{ needs.changes.outputs.docs }}"
           echo "code changes: ${code}"
+          echo "docs changes: ${docs}"
+          echo "docs: ${{ needs.docs.result }}"
           echo "lint: ${{ needs.lint.result }}"
           echo "pre-commit: ${{ needs.pre-commit.result }}"
           echo "test: ${{ needs.test.result }}"
 
-          if [ "${code}" != "true" ]; then
-            echo "No library/test/CI paths changed — CI gate OK."
-            exit 0
+          failed=0
+
+          if [ "${docs}" = "true" ] && [ "${{ needs.docs.result }}" != "success" ]; then
+            echo "::error::docs did not succeed (${{ needs.docs.result }})"
+            failed=1
           fi
 
-          failed=0
+          if [ "${code}" != "true" ]; then
+            if [ "${failed}" -eq 0 ]; then
+              echo "No library/test/CI paths changed — CI gate OK."
+            fi
+            exit "${failed}"
+          fi
+
           if [ "${{ needs.lint.result }}" != "success" ]; then
             echo "::error::lint did not succeed (${{ needs.lint.result }})"
             failed=1
