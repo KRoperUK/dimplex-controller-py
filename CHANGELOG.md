@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.12.0...v0.13.0) (2026-09-15)
+
+
+### Features
+
+* add dedicated setpoint, setback and hot-water-cylinder endpoints ([#96](https://github.com/KRoperUK/dimplex-controller-py/issues/96)) ([204c965](https://github.com/KRoperUK/dimplex-controller-py/commit/204c965ad816c8ceecd2a4214133871926652dd5))
+
+
+### Bug Fixes
+
+* correct EApplianceModes flag values and mode write payloads ([#95](https://github.com/KRoperUK/dimplex-controller-py/issues/95)) ([78cc0fb](https://github.com/KRoperUK/dimplex-controller-py/commit/78cc0fb0bdea2f9b5ce379b3b133cde908adf784))
+* remove PII from test fixtures ([d533544](https://github.com/KRoperUK/dimplex-controller-py/commit/d5335446c5e775f1b17619d0521058b649c767e9))
+
+
+### Documentation
+
+* add decompiled API reference (Dimplex Control APK 2.26.0) ([3cb96d8](https://github.com/KRoperUK/dimplex-controller-py/commit/3cb96d8114076cee9c269b2dc71e800ba778bbf2))
+* decompiled API reference (Dimplex Control APK 2.26.0) ([#89](https://github.com/KRoperUK/dimplex-controller-py/issues/89)) ([3cb96d8](https://github.com/KRoperUK/dimplex-controller-py/commit/3cb96d8114076cee9c269b2dc71e800ba778bbf2))
+* normalise README badges on shields.io ([#86](https://github.com/KRoperUK/dimplex-controller-py/issues/86)) ([d8a7bd1](https://github.com/KRoperUK/dimplex-controller-py/commit/d8a7bd10d21de6fe551008621a9b9339681e861a))
+* reconcile openapi.yaml and API reference with decompiled APK 2.26.0 ([#97](https://github.com/KRoperUK/dimplex-controller-py/issues/97)) ([adf5ad7](https://github.com/KRoperUK/dimplex-controller-py/commit/adf5ad7784d657df1524e0d98e7f1074677defdc)), closes [#94](https://github.com/KRoperUK/dimplex-controller-py/issues/94)
+
 ## [0.12.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.11.0...v0.12.0) (2026-07-13)
 
 
