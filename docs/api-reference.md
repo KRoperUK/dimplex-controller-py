@@ -77,7 +77,7 @@ payload shapes.
 | `set_appliance_setpoint_temperature(hub_id, appliance_ids, temperature)` | `None` | **Preferred setpoint path.** Dedicated endpoint; applies immediately and leaves the schedule untouched. |
 | `set_boost(hub_id, appliance_ids, *, temperature=21.0, duration_minutes=60, enable=True)` | `None` | Timed Boost (`ApplianceModes=2`, `Time` = minutes). |
 | `clear_boost(hub_id, appliance_ids, *, temperature=21.0)` | `None` | Disable Boost (convenience wrapper). |
-| `set_away(hub_id, appliance_ids, *, temperature=7.0, enable=True, until=None, number_of_days=0)` | `None` | Away setback (`ApplianceModes=4`). `until` is the away-until datetime sent in `Date`; 7–30 °C, defaults to the 7 °C anti-freeze floor. |
+| `set_away(hub_id, appliance_ids, *, temperature=7.0, enable=True, until=None, number_of_days=0)` | `None` | Away setback (`ApplianceModes=4`). `until` is the away-until datetime sent in `Date`; **7–18 °C**, defaults to the 7 °C anti-freeze floor. When enabling, the temperature is clamped into that range and a warning logged if it had to be (dimplex-controller-py#98). |
 | `clear_away(hub_id, appliance_ids, *, temperature=7.0)` | `None` | Disable Away (convenience wrapper). |
 | `set_frost_protect(hub_id, appliance_ids, *, enable=True, temperature=7.0)` | `None` | Engage/clear frost protection (`ApplianceModes=32`). |
 | `turn_off(hub_id, appliance_ids)` | `None` | Turn off the way the app does — frost protection at 7 °C. |
@@ -271,7 +271,7 @@ Values for `TimerModeSettings.TimerMode`.
 | `0` | `NONE` | |
 | `1` | `TIMER_MODE` | Following the schedule. |
 | `2` | `BOOST` | `Time` = duration in minutes. |
-| `4` | `AWAY` | `Date` = away-until; temperature 7–30, defaults 7. |
+| `4` | `AWAY` | `Date` = away-until; temperature **7–18** (Away's own ceiling), defaults 7. |
 | `8` | `HOLIDAY` | |
 | `16` | `ADVANCE` | Jump to the next period; `255` on Quantum / Storage Heater. |
 | `32` | `FROST_PROTECT` | Fixed 7 °C — how the app turns a heater off. |
@@ -310,8 +310,10 @@ Values for `TimerModeSettings.TimerMode`.
 
 ```python
 from dimplex_controller import (
-    MODE_TEMP_MIN,             # 7.0  — mode carousel floor
+    MODE_TEMP_MIN,             # 7.0  — mode carousel floor (Boost/Frost/Manual/Eco)
     MODE_TEMP_MAX,             # 30.0 — mode carousel ceiling
+    AWAY_TEMP_MIN,             # 7.0  — Away's own floor
+    AWAY_TEMP_MAX,             # 18.0 — Away's own ceiling, below MODE_TEMP_MAX
     FROST_TEMPERATURE,         # 7.0
     DEFAULT_AWAY_TEMPERATURE,  # 7.0
     DEFAULT_BOOST_TEMPERATURE, # 21.0
@@ -319,6 +321,9 @@ from dimplex_controller import (
     NULL_DATETIME,             # "0001-01-01T00:00:00"
 )
 ```
+
+`ApplianceCapabilities` mirrors these as `min_temp`/`max_temp` and, for the Away
+mode specifically, `away_min_temp`/`away_max_temp`.
 
 ### `UserContext`
 

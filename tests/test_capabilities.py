@@ -18,7 +18,20 @@ def test_default_capabilities_enable_common_controls():
     # The app's mode carousels are 7–30 °C.
     assert caps.min_temp == 7.0
     assert caps.max_temp == 30.0
+    # Away is the exception, with its own narrower ceiling.
+    assert caps.away_min_temp == 7.0
+    assert caps.away_max_temp == 18.0
     assert caps.frost_temp == 7.0
+
+
+def test_as_dict_includes_away_bounds():
+    """The Away bounds travel with the serialised capability snapshot."""
+    data = ApplianceCapabilities().as_dict()
+    assert data["away_min_temp"] == 7.0
+    assert data["away_max_temp"] == 18.0
+    # The general carousel range is untouched.
+    assert data["min_temp"] == 7.0
+    assert data["max_temp"] == 30.0
 
 
 def test_quantum_storage_from_type_name():

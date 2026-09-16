@@ -169,8 +169,9 @@ await client.set_open_window_detection(hub_id, [appliance_id], True)
 # Timed Boost (ApplianceModes=2, Time = minutes)
 await client.set_boost(hub_id, [appliance_id], temperature=25.0, duration_minutes=60)
 
-# Away until a given moment (ApplianceModes=4). Away is a settable 7–30 °C
-# setback and defaults to the 7 °C anti-freeze floor.
+# Away until a given moment (ApplianceModes=4). Away is a settable 7–18 °C
+# setback and defaults to the 7 °C anti-freeze floor. A higher temperature is
+# clamped to 18 °C with a warning, matching what the cloud does to it anyway.
 from datetime import datetime, timedelta, timezone
 
 await client.set_away(

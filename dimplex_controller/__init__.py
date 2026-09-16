@@ -18,6 +18,8 @@ from .auth import TokenBundle, TokenListener
 from .capabilities import ApplianceCapabilities, capabilities_for
 from .client import DimplexControl
 from .const import (
+    AWAY_TEMP_MAX,
+    AWAY_TEMP_MIN,
     DEFAULT_AWAY_TEMPERATURE,
     DEFAULT_BOOST_TEMPERATURE,
     FROST_TEMPERATURE,
@@ -87,6 +89,8 @@ __all__ = [
     "TsiEnergyReport",
     "DEFAULT_AWAY_TEMPERATURE",
     "DEFAULT_BOOST_TEMPERATURE",
+    "AWAY_TEMP_MIN",
+    "AWAY_TEMP_MAX",
     "FROST_TEMPERATURE",
     "MODE_TEMP_MIN",
     "MODE_TEMP_MAX",

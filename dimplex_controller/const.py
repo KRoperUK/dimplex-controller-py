@@ -26,15 +26,24 @@ B2C_POLICY = "B2C_1A_DimplexControlSignupSignin"
 # recovered from Dimplex Control APK 2.26.0.
 # See ``docs/decompiled-api-reference.md``.
 
-# The mode carousels (Away / Boost / Frost / Manual / Eco) all offer 7–30 °C.
+# The mode carousels (Boost / Frost / Manual / Eco) offer 7–30 °C. Away shares
+# the floor but *not* the ceiling — see AWAY_TEMP_MAX below.
 MODE_TEMP_MIN = 7.0
 MODE_TEMP_MAX = 30.0
+
+# Away has its own, narrower ceiling. The app's Away picker will not offer above
+# 18 °C, and a live test against a Quantum requesting 25 °C produced 18 °C in the
+# cloud overview, the app and the appliance's own panel — so the earlier reading
+# of ``UpdateTempRange`` that folded Away into the shared 7–30 carousel was
+# over-generalised (dimplex-controller-py#98).
+AWAY_TEMP_MIN = 7.0
+AWAY_TEMP_MAX = 18.0
 
 # Frost protection is always driven at the anti-freeze floor.
 FROST_TEMPERATURE = 7.0
 
 # Away defaults to the frost floor (it is an anti-freeze setback by default)
-# but is user-settable across MODE_TEMP_MIN..MODE_TEMP_MAX.
+# but is user-settable across AWAY_TEMP_MIN..AWAY_TEMP_MAX.
 DEFAULT_AWAY_TEMPERATURE = FROST_TEMPERATURE
 
 # Boost's default in the app's picker.
