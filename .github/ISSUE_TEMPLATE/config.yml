@@ -1,0 +1,15 @@
+# Issue chooser configuration.
+#
+# `blank_issues_enabled` is true because Discussions is disabled on this
+# repository: with a blank issue unavailable *and* no discussion board, someone
+# with a general question would have nowhere to go at all. If Discussions is ever
+# enabled, add a contact link below and this can go back to false — that is the
+# trap the integration repo fell into (dimplex-controller-hass#202).
+blank_issues_enabled: true
+contact_links:
+  - name: Home Assistant integration
+    url: https://github.com/KRoperUK/dimplex-controller-hass/issues
+    about: Reporting a problem with the Dimplex Hub integration rather than the library? Use its tracker.
+  - name: This is an unofficial project
+    url: https://github.com/KRoperUK/dimplex-controller-py#readme
+    about: Not affiliated with or supported by Dimplex. Please do not raise library problems with Dimplex support.

@@ -1,0 +1,130 @@
+name: Bug report
+description: Report a problem with the dimplex-controller library
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Thanks for taking the time to file a bug report. Please search existing issues first.
+
+
+        This is an **unofficial, reverse-engineered** client. It is not affiliated with,
+        endorsed by, or supported by Dimplex, Glen Dimplex Heating & Ventilation, or the
+        Glen Dimplex Group — please do not raise problems with this library with Dimplex
+        support.
+
+
+        Two things make a report answerable in one reply: a **traceback or a minimal
+        reproduction**, and whether the **official Dimplex Control app** behaves the same
+        way. There are fields for both below.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I have searched existing issues and this is not a duplicate.
+          required: true
+        - label: I am running the latest released version (`pip show dimplex-controller`).
+          required: true
+  - type: input
+    id: library_version
+    attributes:
+      label: dimplex-controller version
+      placeholder: "e.g. 0.13.0"
+    validations:
+      required: true
+  - type: input
+    id: python_version
+    attributes:
+      label: Python version
+      description: The library supports 3.10–3.13.
+      placeholder: "e.g. 3.13.1"
+    validations:
+      required: true
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version (if you are using the integration)
+      description: >-
+        If the problem surfaces through the Home Assistant integration rather than the
+        library directly, its version matters too. Integration issues can also be filed at
+        KRoperUK/dimplex-controller-hass.
+      placeholder: "e.g. 2026.9.2"
+    validations:
+      required: false
+  - type: dropdown
+    id: appliance_family
+    attributes:
+      label: Appliance family
+      description: >-
+        Behaviour differs a lot between families, and several are supported on paper only.
+        See the appliance notes in the documentation.
+      multiple: true
+      options:
+        - Panel heater / PLX / other simple room heater
+        - QRAD
+        - Quantum storage heater
+        - Hot water cylinder
+        - Air-source heat pump (ASHW)
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: What happened, and what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: >-
+        The smallest snippet that shows the problem, with your hub/appliance ids replaced.
+        Please do not paste tokens, passwords or your email address.
+      placeholder: |
+        import asyncio
+        from dimplex_controller import DimplexControl
+
+        async def main():
+            async with aiohttp.ClientSession() as session:
+                client = DimplexControl(session, refresh_token="...")
+                print(await client.get_appliance_overview("hub", ["appliance"]))
+
+        asyncio.run(main())
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: traceback
+    attributes:
+      label: Traceback
+      description: The full traceback, if there is one. Raise the log level to DEBUG if not.
+      render: text
+    validations:
+      required: false
+  - type: dropdown
+    id: official_app
+    attributes:
+      label: Does the official Dimplex Control app do the same thing?
+      description: >-
+        The single most useful line in a report. If the official app behaves identically,
+        the cloud or the appliance is doing this and the library is reporting it faithfully.
+      options:
+        - "No — the official app behaves correctly"
+        - "Yes — the official app does the same"
+        - "Not checked"
+        - "Cannot check (the app cannot reach this appliance either)"
+    validations:
+      required: true
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often does it happen?
+      options:
+        - Every time
+        - Intermittently
+        - Happened once
+    validations:
+      required: false
