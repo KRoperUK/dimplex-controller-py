@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dimplex-controller"
-version = "0.13.0"
+version = "0.13.1"
 description = "Unofficial async Python client for Dimplex (GDHV IoT) heating appliances — not affiliated with Glen Dimplex"
 authors = ["Kieran Roper"]
 license = "MIT"
