@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.1](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.13.0...v0.13.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* give Away its own 7-18 °C bounds instead of the shared 7-30 carousel ([4a96f69](https://github.com/KRoperUK/dimplex-controller-py/commit/4a96f6967669cf7a6dd20b30b8e8c7fd3ed2b976))
+* give Away its own 7–18 °C bounds instead of the shared 7–30 carousel ([#101](https://github.com/KRoperUK/dimplex-controller-py/issues/101)) ([4a96f69](https://github.com/KRoperUK/dimplex-controller-py/commit/4a96f6967669cf7a6dd20b30b8e8c7fd3ed2b976))
+
+
+### Documentation
+
+* state plainly that this library is unofficial and reverse-engineered ([#99](https://github.com/KRoperUK/dimplex-controller-py/issues/99)) ([ed9b7cc](https://github.com/KRoperUK/dimplex-controller-py/commit/ed9b7ccb723993688cc227f1f8d96169dcf7ce02))
+
 ## [0.13.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.12.0...v0.13.0) (2026-09-15)
 
 
