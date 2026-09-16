@@ -347,7 +347,7 @@ class DimplexControl:
         """Get details for a specific zone."""
         payload = {"HubId": hub_id, "ZoneId": zone_id}
         data = await self._request("POST", "/Zones/GetZone", json=payload)
-        return Zone.model_validate(data)  # type: ignore[no-any-return]
+        return Zone.model_validate(data)
 
     async def get_appliance_overview(self, hub_id: str, appliance_ids: list[str]) -> list[ApplianceStatus]:
         """Get status overview for specific appliances.
@@ -373,7 +373,7 @@ class DimplexControl:
     async def get_user_context(self) -> UserContext:
         """Get user profile/context."""
         data = await self._request("GET", "/Identity/GetUserContext")
-        return UserContext.model_validate(data)  # type: ignore[no-any-return]
+        return UserContext.model_validate(data)
 
     async def get_product_models(self) -> list[ProductModel]:
         """Return the cloud product catalogue (models + provisioning metadata).
@@ -393,7 +393,7 @@ class DimplexControl:
             "TimerMode": 0,  # Required field in request; value ignored on read
         }
         data = await self._request("POST", "/RemoteControl/GetTimerModeDetailsForAppliance", json=payload)
-        return TimerModeSettings.model_validate(data)  # type: ignore[no-any-return]
+        return TimerModeSettings.model_validate(data)
 
     async def get_schedule(self, hub_id: str, appliance_id: str) -> TimerModeSettings:
         """Return the current timer mode + periods (alias of :meth:`get_appliance_features`)."""
@@ -911,7 +911,7 @@ class DimplexControl:
             "/RemoteControl/ApiGetTimerModeDetailsForHeatPumpHwcAppliance",
             json=payload,
         )
-        return TimerModeSettings.model_validate(data)  # type: ignore[no-any-return]
+        return TimerModeSettings.model_validate(data)
 
     async def set_heat_pump_hot_water_schedule(self, settings: TimerModeSettings) -> TimerModeSettings:
         """Write an ASHW cylinder's schedule periods.

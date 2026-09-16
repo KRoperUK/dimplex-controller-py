@@ -139,7 +139,7 @@ class ProductModel(BaseModel):
         if not raw:
             return None
         try:
-            return AutomaticProvisioning.model_validate_json(raw)  # type: ignore[no-any-return]
+            return AutomaticProvisioning.model_validate_json(raw)
         except (json.JSONDecodeError, ValueError):
             return None
 
@@ -178,7 +178,7 @@ class Appliance(BaseModel):
         if not raw:
             return None
         try:
-            return AutomaticProvisioning.model_validate_json(raw)  # type: ignore[no-any-return]
+            return AutomaticProvisioning.model_validate_json(raw)
         except (json.JSONDecodeError, ValueError):
             return None
 
@@ -425,7 +425,7 @@ class TsiEnergyReport(BaseModel):
     """
 
     HubId: str
-    ApplianceTelemetryData: dict[str, list] = Field(default_factory=dict)
+    ApplianceTelemetryData: dict[str, list[Any]] = Field(default_factory=dict)
 
 
 # `TsiReportType` integer values understood by the API. We do not know the

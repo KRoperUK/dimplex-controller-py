@@ -41,7 +41,30 @@ pre-commit install
 pre-commit run --all-files
 ```
 
-The pre-commit suite is the same set of checks CI runs.
+The hooks cover whitespace, file endings and formatting (`ruff`, `ruff-format`,
+the `pre-commit-hooks` set). **mypy and pytest run in CI but are not hooks**, so
+the four commands above are still yours to run before opening a PR.
+
+Ruff's effective pin is the `ruff-pre-commit` `rev:` in
+`.pre-commit-config.yaml`: pre-commit provisions that version, and the CI `lint`
+job installs the same one. The `ruff` requirement in `pyproject.toml` is a
+compatible range for `poetry run ruff`, so the hook revision is what the repo
+agrees on.
+
+## Optional: open a PR automatically on push
+
+`.githooks/post-push` opens a PR for the branch you just pushed, using
+`gh pr create --fill` with the latest commit message as the title. It is opt-in
+per clone — nothing enables it for you:
+
+```console
+$ git config core.hooksPath .githooks
+```
+
+It needs the [GitHub CLI](https://cli.github.com/) installed and authenticated
+(`gh auth login`), and it skips `main`. Because it opens the PR immediately, it
+suits a branch-per-PR workflow where you are happy to review on GitHub rather
+than before pushing.
 
 ## Pull requests
 

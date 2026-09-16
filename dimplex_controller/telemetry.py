@@ -285,7 +285,7 @@ def summarise_energy(
         and isinstance(points[0], tuple)
         and len(points[0]) == 2
     ):
-        parsed = list(points)  # type: ignore[arg-type]
+        parsed = list(points)
     else:
         parsed = parse_telemetry_points(points, value_keys=value_keys)
 
