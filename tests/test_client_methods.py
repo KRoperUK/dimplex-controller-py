@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 import aiohttp
@@ -194,6 +195,75 @@ async def test_set_away_accepts_explicit_until(aresponses):
     # Naive .NET DateTime — no offset suffix.
     assert captured["body"]["Settings"]["Date"] == "2026-12-24T09:30:00"
     assert captured["body"]["Settings"]["Temperature"] == 18
+
+
+@pytest.mark.asyncio
+async def test_set_away_clamps_to_the_away_range(aresponses, caplog):
+    """Away tops out at 18 °C; a higher target is clamped and logged, not passed through.
+
+    The cloud reduces such a value silently, so passing it through left the
+    caller believing a temperature the appliance never reached
+    (dimplex-controller-py#98).
+    """
+    temperatures: list[int] = []
+
+    async def handler(request):
+        temperatures.append((await request.json())["Settings"]["Temperature"])
+        return _json(aresponses)
+
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceMode", "POST", handler)
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceMode", "POST", handler)
+
+    async with aiohttp.ClientSession() as session:
+        client = _authed(session)
+        with caplog.at_level(logging.WARNING, logger="dimplex_controller.client"):
+            await client.set_away("hub-1", ["a-1"], temperature=25.0)
+        await client.set_away("hub-1", ["a-1"], temperature=5.0)
+
+    assert temperatures == [18, 7]
+    assert "outside the 7.0–18.0 °C the app offers for Away" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_set_away_leaves_in_range_targets_alone(aresponses, caplog):
+    """A temperature inside 7–18 °C is sent verbatim, with no warning."""
+    captured: dict = {}
+
+    async def handler(request):
+        captured["body"] = await request.json()
+        return _json(aresponses)
+
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceMode", "POST", handler)
+
+    async with aiohttp.ClientSession() as session:
+        with caplog.at_level(logging.WARNING, logger="dimplex_controller.client"):
+            await _authed(session).set_away("hub-1", ["a-1"], temperature=17.0)
+
+    assert captured["body"]["Settings"]["Temperature"] == 17
+    assert caplog.text == ""
+
+
+@pytest.mark.asyncio
+async def test_clear_away_does_not_clamp_the_inert_temperature(aresponses):
+    """Clearing Away ignores the temperature, so an out-of-range one is passed through.
+
+    Callers clear the mode using whatever setpoint they have to hand (the
+    integration sends the current room setpoint), which is routinely above 18.
+    Clamping there would log a warning about a value the cloud never reads.
+    """
+    captured: dict = {}
+
+    async def handler(request):
+        captured["body"] = await request.json()
+        return _json(aresponses)
+
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceMode", "POST", handler)
+
+    async with aiohttp.ClientSession() as session:
+        await _authed(session).clear_away("hub-1", ["a-1"], temperature=21.0)
+
+    assert captured["body"]["Settings"]["Status"] == 0
+    assert captured["body"]["Settings"]["Temperature"] == 21
 
 
 @pytest.mark.asyncio
