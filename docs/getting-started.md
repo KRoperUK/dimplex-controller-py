@@ -27,15 +27,17 @@ pip install dimplex-controller
 
 ### Developers
 
-Clone the repository and install in editable mode with dev dependencies:
+Clone the repository and install in editable mode with the dev dependency group:
 
 ```bash
 git clone https://github.com/KRoperUK/dimplex-controller-py.git
 cd dimplex-controller-py
-pip install -e ".[dev]"
+uv sync
 ```
 
-This installs the library plus `pytest`, `ruff`, `pre-commit`, `mypy` and `twine`.
+This creates `.venv` with the library plus `pytest`, `ruff`, `pre-commit`, `mypy`
+and `twine`, at the versions `uv.lock` records. Prefix the checks below with
+`uv run` — for example `uv run pytest`.
 
 ## First run
 

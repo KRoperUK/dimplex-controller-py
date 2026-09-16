@@ -77,8 +77,11 @@ pip install .
 ```bash
 git clone https://github.com/KRoperUK/dimplex-controller-py.git
 cd dimplex-controller-py
-pip install -e ".[dev]"
+uv sync
 ```
+
+`uv sync` creates `.venv`, installs the library in editable mode, and installs the
+dev dependency group from `uv.lock`.
 
 > **Requires:** Python 3.10 or later.
 
