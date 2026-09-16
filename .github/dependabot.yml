@@ -1,0 +1,44 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+      - github_actions
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+      - python
+    commit-message:
+      prefix: "chore(deps)"
+    open-pull-requests-limit: 5
+    groups:
+      # Bundle low-risk minor/patch bumps into a single PR; majors stay separate
+      # so they get individual review.
+      python-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # No `pre-commit` ecosystem on purpose. The hooks are pre-commit-hooks and
+  # ruff-pre-commit, and the ruff *revision* here is what CI installs — the lint
+  # job derives its ruff version from this file. Watching it would split a ruff
+  # bump across two PRs (this rev and the `ruff = "^0.15.0"` range in
+  # pyproject.toml), which is the arrangement that made every ruff bump
+  # unmergeable in the integration repo until
+  # dimplex-controller-hass#201/#213 removed its second pin. Add this ecosystem
+  # only once ruff is pinned in exactly one place.

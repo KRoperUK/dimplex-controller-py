@@ -1,0 +1,58 @@
+# Managed by .github/workflows/sync-labels.yml (EndBug/label-sync).
+#
+# This file mirrors the labels the repository already carries, plus the three that
+# .github/dependabot.yml references. GitHub drops a label it cannot find, without
+# reporting anything — so a dependabot label missing from here is invisible bug
+# material, the same failure mode as the hyphen/underscore typo in the integration
+# repo (dimplex-controller-hass#201).
+#
+# `delete-other-labels: false` on the sync workflow, so a label absent here is left
+# alone rather than removed. Prune this list and the picker together, deliberately.
+
+# --- Conventional issue / PR labels ---
+- name: bug
+  color: "d73a4a"
+  description: Something isn't working
+- name: documentation
+  color: "0075ca"
+  description: Improvements or additions to documentation
+- name: duplicate
+  color: "cfd3d7"
+  description: This issue or pull request already exists
+- name: enhancement
+  color: "a2eeef"
+  description: New feature or request
+- name: good first issue
+  color: "7057ff"
+  description: Good for newcomers
+- name: help wanted
+  color: "008672"
+  description: Extra attention is needed
+- name: invalid
+  color: "e4e669"
+  description: This doesn't seem right
+- name: question
+  color: "d876e3"
+  description: Further information is requested
+- name: wontfix
+  color: "ffffff"
+  description: This will not be worked on
+
+# --- Dependency labels (referenced by .github/dependabot.yml) ---
+- name: dependencies
+  color: "0366d6"
+  description: Pull requests that update a dependency file
+- name: python
+  color: "2b67c6"
+  description: Pull requests that update Python code
+- name: github_actions
+  color: "000000"
+  description: Pull requests that update GitHub Actions code
+
+# --- Release Please ---
+- name: "autorelease: pending"
+  color: "ededed"
+  description: Release-please is preparing a release
+- name: "autorelease: tagged"
+  color: "ededed"
+  description: Release-please has tagged a release

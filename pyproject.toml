@@ -55,11 +55,16 @@ ignore = ["E501"]
 python_version = "3.10"
 files = ["dimplex_controller"]
 ignore_missing_imports = true
-# Incrementally strict — these catch real bugs without requiring a full rewrite.
-disallow_untyped_defs = true
-warn_return_any = true
-warn_unused_configs = true
-warn_redundant_casts = true
+# `strict` rather than the four flags this used to carry (disallow_untyped_defs,
+# warn_return_any, warn_unused_configs, warn_redundant_casts). The library is the
+# layer the Home Assistant integration trusts for models, capabilities and error
+# types, and that consumer runs strict mypy over its own code — so a library
+# checked more loosely could hand it types that do not hold
+# (dimplex-controller-hass#202).
+#
+# Raising it surfaced seven stale `# type: ignore` comments, all of which mypy
+# reported as unused, plus one missing generic argument. No real type errors.
+strict = true
 
 [tool.pytest.ini_options]
 # All async tests use asyncio; "auto" means new tests don't each need the
