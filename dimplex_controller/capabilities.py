@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .const import FROST_TEMPERATURE, MODE_TEMP_MAX, MODE_TEMP_MIN
+from .const import AWAY_TEMP_MAX, AWAY_TEMP_MIN, FROST_TEMPERATURE, MODE_TEMP_MAX, MODE_TEMP_MIN
 from .models import Appliance, ApplianceStatus, AutomaticProvisioning, ProductModel
 
 # Default boost lengths (minutes) offered by the mobile app for most heaters.
@@ -47,6 +47,11 @@ class ApplianceCapabilities:
     climate: bool = True
     min_temp: float = MODE_TEMP_MIN
     max_temp: float = MODE_TEMP_MAX
+    # Away is the one carousel with its own bounds: it shares the 7 °C floor but
+    # stops at 18 °C rather than 30 °C (dimplex-controller-py#98). Consumers
+    # should gate the Away picker on these rather than on min_temp/max_temp.
+    away_min_temp: float = AWAY_TEMP_MIN
+    away_max_temp: float = AWAY_TEMP_MAX
     frost_temp: float = FROST_TEMPERATURE
     default_boost_minutes: int = DEFAULT_BOOST_MINUTES
     boost_durations: tuple[int, ...] = DEFAULT_BOOST_DURATIONS
@@ -83,6 +88,8 @@ class ApplianceCapabilities:
             "climate": self.climate,
             "min_temp": self.min_temp,
             "max_temp": self.max_temp,
+            "away_min_temp": self.away_min_temp,
+            "away_max_temp": self.away_max_temp,
             "frost_temp": self.frost_temp,
             "default_boost_minutes": self.default_boost_minutes,
             "boost_durations": list(self.boost_durations),

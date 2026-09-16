@@ -12,6 +12,8 @@ import aiohttp
 from .auth import AuthManager, TokenBundle, TokenListener
 from .capabilities import ApplianceCapabilities, capabilities_for
 from .const import (
+    AWAY_TEMP_MAX,
+    AWAY_TEMP_MIN,
     BASE_URL,
     DEFAULT_AWAY_TEMPERATURE,
     DEFAULT_BOOST_TEMPERATURE,
@@ -68,6 +70,26 @@ _RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
 # 5-minute default, which can hang a caller (e.g. a Home Assistant coordinator
 # poll) on a stalled connection. Callers may override per-client.
 DEFAULT_TIMEOUT = 30.0
+
+
+def _clamp_away_temperature(temperature: float) -> float:
+    """Clamp an Away target into the mode's own 7–18 °C range.
+
+    The cloud reduces a higher value silently, so clamping here keeps the value
+    the caller asked for and the value the appliance ends up at in agreement,
+    and the warning makes the adjustment visible.
+    """
+    value = float(temperature)
+    clamped = min(max(value, AWAY_TEMP_MIN), AWAY_TEMP_MAX)
+    if clamped != value:
+        _LOGGER.warning(
+            "Away temperature %.1f °C is outside the %s–%s °C the app offers for Away; using %.1f °C",
+            value,
+            AWAY_TEMP_MIN,
+            AWAY_TEMP_MAX,
+            clamped,
+        )
+    return clamped
 
 
 def _coerce_timeout(timeout: float | aiohttp.ClientTimeout | None) -> aiohttp.ClientTimeout | None:
@@ -591,14 +613,25 @@ class DimplexControl:
         """Enable or disable Away mode.
 
         Sends ``ApplianceModes=4`` (:attr:`~dimplex_controller.ApplianceModeFlag.AWAY`).
-        Away is a *settable* setback: the app offers 7–30 °C and defaults to the
-        7 °C anti-freeze floor, so a low ``temperature`` is the normal case
-        rather than a bug.
+        Away is a *settable* setback: the app offers 7–18 °C
+        (:data:`~dimplex_controller.AWAY_TEMP_MIN` / :data:`~dimplex_controller.AWAY_TEMP_MAX`)
+        and defaults to the 7 °C anti-freeze floor, so a low ``temperature`` is
+        the normal case rather than a bug.
 
         ``until`` is the "away until" datetime the app sends in ``Date``. Pass a
         :class:`~datetime.datetime` or an ISO-8601 string. ``number_of_days`` is
         retained for backwards compatibility and, when ``until`` is omitted, is
         converted into an equivalent ``Date``.
+
+        When engaging Away, ``temperature`` is clamped into the Away range and a
+        warning logged if it had to be: the cloud silently reduces a higher
+        value, so clamping locally makes the outcome the caller actually gets
+        visible rather than surprising (dimplex-controller-py#98). The clamp is
+        skipped when clearing, where the temperature is inert.
+
+        .. versionchanged:: 0.13.1
+           ``temperature`` is clamped to ``AWAY_TEMP_MIN``..``AWAY_TEMP_MAX``
+           when ``enable`` is true.
 
         .. versionchanged:: 0.13.0
            Previously sent ``ApplianceModes=32``, which is **FrostProtect** —
@@ -607,6 +640,8 @@ class DimplexControl:
            Away duration now travels in ``Date`` as the app does, not only in
            ``NumberOfDays``.
         """
+        if enable:
+            temperature = _clamp_away_temperature(temperature)
         days = int(number_of_days)
         if until is None and days > 0:
             until = datetime.now(timezone.utc) + timedelta(days=days)
