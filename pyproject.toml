@@ -1,17 +1,16 @@
-[tool.poetry]
+[project]
 name = "dimplex-controller"
 version = "0.13.1"
 description = "Unofficial async Python client for Dimplex (GDHV IoT) heating appliances — not affiliated with Glen Dimplex"
-authors = ["Kieran Roper"]
+authors = [{ name = "Kieran Roper" }]
 license = "MIT"
+license-files = ["LICENSE"]
 readme = "README.md"
-homepage = "https://github.com/KRoperUK/dimplex-controller-py"
-repository = "https://github.com/KRoperUK/dimplex-controller-py"
+requires-python = ">=3.10,<4.0"
 keywords = ["dimplex", "heating", "control", "iot", "asyncio"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Natural Language :: English",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
@@ -19,32 +18,48 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Home Automation",
 ]
-packages = [{ include = "dimplex_controller" }]
+# Lower bounds are the versions this release was developed and tested against;
+# the upper bounds keep the previous caret semantics (a caret range is
+# `>=X,<next-major`), so consumers gain no surprise from the migration.
+dependencies = [
+    "aiohttp>=3.14.3,<4",
+    "pydantic>=2.13.5,<3",
+]
 
-[tool.poetry.scripts]
+[project.urls]
+Homepage = "https://github.com/KRoperUK/dimplex-controller-py"
+Repository = "https://github.com/KRoperUK/dimplex-controller-py"
+
+[project.scripts]
 dimplex = "dimplex_controller.cli:main"
 
-[tool.poetry.dependencies]
-python = "^3.10"
-aiohttp = "^3.9.0"
-pydantic = "^2.0.0"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.0.0"
-pytest-asyncio = "^1.0.0"
-pytest-cov = "^6.0.0"
-aresponses = "^3.0.0"
-ruff = "^0.15.0"
-pre-commit = "^3.6.0"
-twine = "^6.2.0"
-python-dotenv = "^1.2.1"
-mypy = "^1.0.0"
+# PEP 735 dependency groups: not installed into a consumer's environment, only
+# into a development one.
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1,<10",
+    "pytest-asyncio>=1.4.0,<2",
+    "pytest-cov>=7.1.0,<8",
+    "aresponses>=3.0.0,<4",
+    "ruff>=0.16.7,<0.17",
+    "pre-commit>=4.6.2,<5",
+    "twine>=7.0.0,<8",
+    "python-dotenv>=1.2.3,<2",
+    "mypy>=2.3.1,<3",
+]
 
 [tool.ruff]
 line-length = 120
 target-version = "py310"
+# Python inside Markdown is not formatted here. The code blocks in README.md and
+# docs/ carry deliberate column alignment (see the temperature-constant table in
+# docs/api-reference.md) and ruff's formatter normalises comment spacing, so
+# formatting them would trade readable docs for tool uniformity. This also keeps a
+# bare `ruff format .` in step with the pre-commit hooks, which are python/pyi only.
+extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B", "SIM"]
@@ -81,5 +96,11 @@ show_missing = true
 fail_under = 80
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["uv_build>=0.11.19,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# The package is at the repository root, not under src/, which is what uv_build
+# assumes by default. The module name is inferred from the project name
+# (dimplex-controller -> dimplex_controller), so it needs no override.
+module-root = ""

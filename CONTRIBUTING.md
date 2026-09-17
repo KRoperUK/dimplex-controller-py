@@ -15,41 +15,39 @@ Contributing to this project should be as easy and transparent as possible.
 ## Development setup
 
 ```bash
-# Install Poetry (https://python-poetry.org/docs/#installation), then:
-poetry install
+# Install uv (https://docs.astral.sh/uv/getting-started/installation/), then:
+uv sync
 ```
 
-This will install the library, all dev dependencies (pytest, ruff,
-pre-commit, mypy) into a project-local venv.
+`uv sync` creates `.venv`, installs the library in editable mode, and installs the
+dev dependency group (pytest, ruff, mypy, pre-commit and friends) — all at the
+exact versions recorded in `uv.lock`.
 
 ## Local checks
 
 Before opening a PR, make sure all of these pass locally:
 
 ```bash
-poetry run ruff check dimplex_controller tests
-poetry run ruff format --check dimplex_controller tests
-poetry run mypy
-poetry run pytest
+uv run ruff check dimplex_controller tests
+uv run ruff format --check dimplex_controller tests
+uv run mypy
+uv run pytest
 ```
 
 Or, install the pre-commit hooks once and let them run on every commit:
 
 ```bash
-pip install pre-commit
-pre-commit install
-pre-commit run --all-files
+uv run pre-commit install
+uv run pre-commit run --all-files
 ```
 
-The hooks cover whitespace, file endings and formatting (`ruff`, `ruff-format`,
-the `pre-commit-hooks` set). **mypy and pytest run in CI but are not hooks**, so
-the four commands above are still yours to run before opening a PR.
+The hooks cover whitespace, file endings and formatting (`ruff-check`,
+`ruff-format`, the `pre-commit-hooks` set). **mypy and pytest run in CI but are not
+hooks**, so the four commands above are still yours to run before opening a PR.
 
-Ruff's effective pin is the `ruff-pre-commit` `rev:` in
-`.pre-commit-config.yaml`: pre-commit provisions that version, and the CI `lint`
-job installs the same one. The `ruff` requirement in `pyproject.toml` is a
-compatible range for `poetry run ruff`, so the hook revision is what the repo
-agrees on.
+Run the hooks through `uv run`: the ruff hooks execute the environment's ruff
+(`language: system`), so `uv.lock` is the single source of the ruff version — there
+is no second pin in `.pre-commit-config.yaml` to drift from it.
 
 ## Optional: open a PR automatically on push
 

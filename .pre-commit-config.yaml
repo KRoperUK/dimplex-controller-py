@@ -8,10 +8,30 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.21
+  # ruff runs from the project environment (`uv run pre-commit`), so uv.lock is the
+  # single source of truth for its version. It used to be pinned here as well, via
+  # ruff-pre-commit's `rev:`, while CI installed the version in poetry.lock — two
+  # pins that dependabot could only ever bump one of, which is the arrangement that
+  # made every ruff bump unmergeable in the integration repo until its second pin
+  # was removed (dimplex-controller-hass#201, #213).
+  #
+  # `types_or` is deliberately python/pyi only. ruff 0.16's ruff-format hook also
+  # claims `markdown`, and the Python blocks in README.md and docs/ are hand-aligned
+  # on purpose — ruff's formatter normalises comment spacing, so it would reflow the
+  # aligned temperature-constant table in docs/api-reference.md. [tool.ruff]
+  # extend-exclude keeps a bare `ruff format .` consistent with the hooks.
+  - repo: local
     hooks:
-      # Run the linter first so format auto-fixes don't shadow real issues.
-      - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
+      # Lint first, so format auto-fixes cannot shadow a real issue.
+      - id: ruff-check
+        name: ruff (lint, --fix)
+        entry: ruff check --force-exclude --fix --exit-non-zero-on-fix
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
       - id: ruff-format
+        name: ruff (format)
+        entry: ruff format --force-exclude
+        language: system
+        types_or: [python, pyi]
+        require_serial: true

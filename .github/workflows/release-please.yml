@@ -33,19 +33,18 @@ jobs:
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-            - name: Set up Python
-              uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+            - name: Install uv
+              uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
               with:
                   python-version: "3.10"
 
-            - name: Install Poetry
-              uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
-              with:
-                  virtualenvs-create: true
-                  virtualenvs-in-project: true
-
             - name: Build package
-              run: poetry build
+              # uv_build, configured in [tool.uv.build-backend]. The artefacts were
+              # diffed against the poetry-built 0.13.1 before switching: same module
+              # set, same entry point, same license file. The only metadata change is
+              # PEP 639 — License-Expression replaces the License field, and the
+              # now-deprecated license classifier is gone.
+              run: uv build
 
             - name: Publish to PyPI
               uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2

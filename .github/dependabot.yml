@@ -14,7 +14,16 @@ updates:
         patterns:
           - "*"
 
-  - package-ecosystem: pip
+  # `uv`, not `pip`: dependabot drives this repository through uv.lock and
+  # pyproject.toml (PEP 621). uv is a first-class ecosystem in dependabot
+  # (`Dependabot::Uv::PackageManager::ECOSYSTEM = "uv"`).
+  #
+  # Everything is grouped, including majors. Majors used to stay separate so each
+  # got individual review, which in practice meant a queue of five PRs to merge one
+  # at a time — and `open-pull-requests-limit` then held back the rest. One PR per
+  # week covering majors and minors together is what the maintainer wants; re-add
+  # `update-types: [minor, patch]` below to split majors out again.
+  - package-ecosystem: uv
     directory: "/"
     schedule:
       interval: weekly
@@ -25,20 +34,12 @@ updates:
       prefix: "chore(deps)"
     open-pull-requests-limit: 5
     groups:
-      # Bundle low-risk minor/patch bumps into a single PR; majors stay separate
-      # so they get individual review.
-      python-minor-patch:
+      python:
         patterns:
           - "*"
-        update-types:
-          - minor
-          - patch
 
-  # No `pre-commit` ecosystem on purpose. The hooks are pre-commit-hooks and
-  # ruff-pre-commit, and the ruff *revision* here is what CI installs — the lint
-  # job derives its ruff version from this file. Watching it would split a ruff
-  # bump across two PRs (this rev and the `ruff = "^0.15.0"` range in
-  # pyproject.toml), which is the arrangement that made every ruff bump
-  # unmergeable in the integration repo until
-  # dimplex-controller-hass#201/#213 removed its second pin. Add this ecosystem
-  # only once ruff is pinned in exactly one place.
+  # No `pre-commit` ecosystem on purpose. The hooks are pre-commit-hooks plus local
+  # ruff hooks that run the environment's ruff, so there is nothing ruff-shaped here
+  # to bump out of step with uv.lock — but adding this ecosystem would also start
+  # proposing bumps for the hook revisions, which is harmless yet not wanted until
+  # someone asks for it.

@@ -156,9 +156,9 @@ nest_asyncio.apply()
 - Pre-commit hooks are stale.
 
 **Steps to resolve:**
-1. Reinstall dependencies: `poetry install` or `pip install -e ".[dev]"`.
-2. Update pre-commit hooks: `pre-commit autoupdate`.
-3. Run checks manually: `ruff check dimplex_controller tests && ruff format --check dimplex_controller tests && mypy && pytest`.
+1. Reinstall dependencies from the lock: `uv sync`.
+2. Update pre-commit hooks: `uv run pre-commit autoupdate`.
+3. Run checks manually: `uv run ruff check dimplex_controller tests && uv run ruff format --check dimplex_controller tests && uv run mypy && uv run pytest`.
 
 ## Still stuck?
 

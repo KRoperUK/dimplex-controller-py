@@ -35,7 +35,7 @@ jobs:
               - 'dimplex_controller/**'
               - 'tests/**'
               - 'pyproject.toml'
-              - 'poetry.lock'
+              - 'uv.lock'
               - '.pre-commit-config.yaml'
               - '.github/workflows/test.yml'
             docs:
@@ -70,50 +70,43 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           python-version: "3.13"
-          cache: pip
-          # The lock too: this job reads the mypy version out of it.
-          cache-dependency-path: |
-            pyproject.toml
-            poetry.lock
+          enable-cache: true
 
-      - name: Install ruff
-        # Pinned to the same version as .pre-commit-config.yaml so the pre-commit
-        # and CI invocations of ruff cannot drift.
-        run: pip install "ruff==$(grep -A1 'ruff-pre-commit' .pre-commit-config.yaml | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sed 's/^v//')"
+      - name: Install dependencies
+        # `--frozen`, deliberately not `--locked`. release-please bumps the version
+        # in pyproject.toml without touching uv.lock, and uv records the project's
+        # own version inside the lock — so `--locked` fails on every release PR and
+        # leaves main's lock "stale" until someone refreshes it. `--frozen` installs
+        # exactly what the lock pins and does not read pyproject in place of it.
+        # A dependency added without re-locking still fails loudly, as a missing
+        # import in the tests rather than a silent drift.
+        run: uv sync --frozen
 
       - name: Lint with ruff
-        run: ruff check dimplex_controller/ tests/
+        # ruff comes from uv.lock, via the lock's dependency group — the single
+        # source of its version, shared with the pre-commit hooks.
+        run: uv run ruff check dimplex_controller/ tests/
 
       - name: Check formatting
-        run: ruff format --check dimplex_controller/ tests/
-
-      - name: Install mypy
-        # The version poetry resolves, read from the lock rather than left to
-        # float. `poetry run mypy` locally and this job must agree: with `strict`
-        # set, a version difference is not cosmetic, it changes which checks run.
-        run: pip install "mypy==$(awk '/^name = "mypy"$/{getline; print; exit}' poetry.lock | sed -E 's/^version = "(.*)"$/\1/')"
-
-      - name: Install runtime dependencies
-        # mypy must be able to resolve pydantic and aiohttp, or `strict` cannot
-        # check the library at all. With `ignore_missing_imports = true`, an
-        # unresolvable pydantic makes `BaseModel` itself `Any`, and strict's
-        # `disallow_subclassing_any` then reports "Class cannot subclass
-        # BaseModel (has type Any)" for every model in the package — 20 errors,
-        # none of them real. Installing the package brings its own dependencies,
-        # so this cannot drift when a runtime dependency is added.
-        run: pip install .
+        run: uv run ruff format --check dimplex_controller/ tests/
 
       - name: Type check with mypy
-        # Convert mypy output into GitHub annotations (inline on the PR diff) while
-        # preserving its exit status via pipefail, so type errors are surfaced on the
+        # uv resolves mypy *and* the runtime dependencies from the lock. That
+        # matters: with pydantic unresolvable and `ignore_missing_imports = true`,
+        # `BaseModel` is `Any` and strict's `disallow_subclassing_any` reports
+        # "Class cannot subclass BaseModel (has type Any)" for every model in the
+        # package — 20 errors, none of them real.
+        #
+        # Output is converted into GitHub annotations (inline on the PR diff) while
+        # pipefail preserves the exit status, so a type error surfaces on the
         # offending line instead of only in the raw log.
         run: |
           set -o pipefail
-          mypy | sed -E \
+          uv run mypy | sed -E \
             -e 's/^([^:]+):([0-9]+): error: (.*)$/::error file=\1,line=\2::\3/' \
             -e 's/^([^:]+):([0-9]+): note: (.*)$/::notice file=\1,line=\2::\3/'
 
@@ -125,21 +118,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           python-version: "3.13"
-          cache: pip
-          cache-dependency-path: pyproject.toml
+          enable-cache: true
 
-      - name: Install pre-commit
-        run: pip install pre-commit
+      - name: Install dependencies
+        run: uv sync --frozen
 
       - name: Run pre-commit on all files
-        # Pre-commit runs the local hook suite (trailing-whitespace, end-of-file-fixer,
-        # ruff, ruff-format). It catches drift between the ruff-pre-commit pin and
-        # the ruff pin in pyproject.toml.
-        run: pre-commit run --all-files --show-diff-on-failure --color=always
+        # Through `uv run`, so the ruff hooks — which run the environment's ruff
+        # (`language: system`) rather than a pinned pre-commit mirror — resolve the
+        # version from uv.lock, exactly as a contributor's `uv run pre-commit` does.
+        run: uv run pre-commit run --all-files --show-diff-on-failure --color=always
 
   test:
     needs: changes
@@ -149,37 +141,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Matches requires-python (>=3.10) in pyproject.toml. 3.13 is added so the
-        # library stays forward-compatible with the Python version the consuming
-        # Home Assistant integration now targets.
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        # Matches requires-python (>=3.10) in pyproject.toml and the Python
+        # classifiers the package publishes. 3.14 is the runtime the consuming Home
+        # Assistant integration targets.
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - name: Install uv and Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           python-version: ${{ matrix.python-version }}
-
-      - name: Install Poetry
-        uses: snok/install-poetry@a783c322200f0519c7926aa6faa857c4e23e9263 # v1.4.2
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-
-      - name: Cache venv
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
-          restore-keys: |
-            venv-${{ runner.os }}-${{ matrix.python-version }}-
+          enable-cache: true
 
       - name: Install dependencies
-        run: poetry install --no-interaction
+        run: uv sync --frozen
 
       - name: Run tests with coverage
-        run: poetry run pytest --cov=dimplex_controller --cov-report=term-missing
+        run: uv run pytest --cov=dimplex_controller --cov-report=term-missing
 
   # Stable required status check for the `main` branch ruleset.
   # - Python/code changes: fails unless lint, pre-commit, and the full test matrix succeed
