@@ -97,6 +97,15 @@ Merging a release-please PR will:
   (uses the `pypi` environment, requires the trusted-publisher OIDC trust to
   be configured in PyPI project settings).
 
+The repository needs one secret for that first step to work smoothly:
+**`RELEASE_PLEASE_TOKEN`**, a fine-grained PAT with `Contents: read/write` and
+`Pull requests: read/write` on this repository. Without it, release-please runs as
+`github-actions[bot]`, and bot-authored commits put their workflow runs into
+`action_required` with no jobs created — so the release PR sits `BLOCKED` on a
+required `ci` check that never runs, until someone approves the runs by hand. The
+workflow falls back to the default token when the secret is absent, so adding it is
+an improvement rather than a prerequisite.
+
 ## Any contributions you make will be under the MIT Software License
 
 In short, when you submit code changes, your submissions are understood to be

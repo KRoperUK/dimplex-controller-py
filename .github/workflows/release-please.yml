@@ -19,6 +19,23 @@ jobs:
               id: release
               with:
                   release-type: python
+                  # Prefer a PAT / GitHub App token when one is configured, and fall
+                  # back to the workflow token so this still works unconfigured.
+                  #
+                  # Why it is worth configuring: commits authored by
+                  # `github-actions[bot]` put their workflow runs into
+                  # `action_required` with zero jobs created. `ci` is a required
+                  # status check, so the release PR sits BLOCKED with an empty
+                  # `statusCheckRollup` until someone approves the runs by hand —
+                  # which is exactly what happened to #100, and to the integration's
+                  # release PR four times over. A token that is not the Actions bot
+                  # makes the runs start normally
+                  # (KRoperUK/dimplex-controller-hass#200).
+                  #
+                  # Create a fine-grained PAT with `Contents: read/write` and
+                  # `Pull requests: read/write` on this repository and add it as the
+                  # `RELEASE_PLEASE_TOKEN` repository secret. Nothing else changes.
+                  token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
 
     publish:
         needs: release-please
