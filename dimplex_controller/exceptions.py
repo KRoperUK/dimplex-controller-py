@@ -79,11 +79,31 @@ class DimplexAuthTransientError(DimplexAuthError):
 
 
 class DimplexApiError(DimplexError):
-    """Exception for API errors."""
+    """Exception for API errors.
 
-    def __init__(self, status: int, message: str):
+    Attributes:
+        status: HTTP status returned by the API.
+        message: Short server message (never a full token).
+        transient: ``True`` when the failure may succeed on retry — a 5xx or 429
+            raised only after ``client.py`` exhausted its internal retries. ``False``
+            for a hard 4xx (404/400/403). Callers (e.g. the Home Assistant
+            coordinator) back off and keep entities available on ``transient``, and
+            surface the error otherwise.
+        code: Optional stable, machine-readable identifier.
+    """
+
+    def __init__(
+        self,
+        status: int,
+        message: str,
+        *,
+        transient: bool = False,
+        code: str | None = None,
+    ):
         self.status = status
         self.message = message
+        self.transient = transient
+        self.code = code
         super().__init__(f"API Error {status}: {message}")
 
 

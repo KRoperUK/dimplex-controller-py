@@ -279,7 +279,7 @@ Main client class. Construct with an `aiohttp.ClientSession` and a `refresh_toke
 
 - **`DimplexError`** — Base exception.
 - **`DimplexAuthError`** — Authentication or token errors.
-- **`DimplexApiError`** — API returned a non-success status. Contains `status` and `message`.
+- **`DimplexApiError`** — API returned a non-success status. Contains `status`, `message`, `transient` (`True` for a 5xx/429 raised after retries were exhausted, so a caller can back off rather than surface it) and an optional `code`.
 - **`DimplexConnectionError`** — Network-level failures.
 
 ## Troubleshooting
