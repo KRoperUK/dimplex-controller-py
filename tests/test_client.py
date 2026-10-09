@@ -256,6 +256,50 @@ async def test_get_tsi_energy_report_error(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_api_error_5xx_is_transient(aresponses):
+    """A 5xx surfaces as DimplexApiError with transient=True (caller should back off)."""
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/Reports/GetTsiEnergyReportDataForHub",
+        "POST",
+        aresponses.Response(status=503, body="unavailable"),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(session, refresh_token="fake_refresh")
+        client.auth._access_token = "fake_access"
+        client.auth._expires_at = 9999999999
+
+        with pytest.raises(DimplexApiError) as excinfo:
+            await client.get_tsi_energy_report("hub-1")
+
+    assert excinfo.value.status == 503
+    assert excinfo.value.transient is True
+
+
+@pytest.mark.asyncio
+async def test_api_error_4xx_is_not_transient(aresponses):
+    """A hard 4xx surfaces as DimplexApiError with transient=False (surface it)."""
+    aresponses.add(
+        "mobileapi.gdhv-iot.com",
+        "/api/Reports/GetTsiEnergyReportDataForHub",
+        "POST",
+        aresponses.Response(status=404, body="nope"),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        client = DimplexControl(session, refresh_token="fake_refresh")
+        client.auth._access_token = "fake_access"
+        client.auth._expires_at = 9999999999
+
+        with pytest.raises(DimplexApiError) as excinfo:
+            await client.get_tsi_energy_report("hub-1")
+
+    assert excinfo.value.status == 404
+    assert excinfo.value.transient is False
+
+
+@pytest.mark.asyncio
 async def test_get_tsi_energy_report_payload(aresponses):
     """The request payload includes HubId, StartDate, EndDate and report params."""
     captured: dict = {}

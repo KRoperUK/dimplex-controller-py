@@ -274,12 +274,14 @@ class DimplexControl:
                             attempts - 1,
                             delay,
                         )
-                        last_error = DimplexApiError(resp.status, text)
+                        last_error = DimplexApiError(resp.status, text, transient=resp.status in _RETRYABLE_STATUS)
                         await asyncio.sleep(delay)
                         continue
 
                     _LOGGER.error("API request failed: %s - %s", resp.status, text)
-                    raise DimplexApiError(resp.status, text)
+                    # A 5xx/429 that reaches here was retried and still failed, so it
+                    # is transient (back off); a 4xx is a hard failure (surface it).
+                    raise DimplexApiError(resp.status, text, transient=resp.status in _RETRYABLE_STATUS)
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                 if allow_retry and attempt + 1 < attempts:
                     delay = self._backoff_seconds(attempt)

@@ -377,7 +377,7 @@ Aggregate to daily/lifetime totals. Returns an `EnergySummary` with `total_kwh`,
 | `DimplexAuthInvalidCredentialsError` | Email/password rejected by B2C. |
 | `DimplexAuthParseError` | Could not parse B2C HTML. |
 | `DimplexAuthTransientError` | Temporary auth infra failure (retry may help). |
-| `DimplexApiError` | API returned non-success. Attributes: `status`, `message`. |
+| `DimplexApiError` | API returned non-success. Attributes: `status`, `message`, `transient` (`True` for a 5xx/429 raised after retries were exhausted — back off; `False` for a hard 4xx — surface it), `code`. |
 | `DimplexConnectionError` | Network failures (DNS, connection, timeout). |
 
 ### `classify_oauth_token_error(status, body)`
