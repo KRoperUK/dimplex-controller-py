@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.13.1...v0.14.0) (2026-10-09)
+
+
+### Features
+
+* **exceptions:** classify DimplexApiError as transient (5xx/429) or hard (4xx) ([#125](https://github.com/KRoperUK/dimplex-controller-py/issues/125)) ([7bbbb8a](https://github.com/KRoperUK/dimplex-controller-py/commit/7bbbb8a0a9807710c9072e2531c2850d170a0265))
+* **exceptions:** classify DimplexApiError as transient or hard ([7bbbb8a](https://github.com/KRoperUK/dimplex-controller-py/commit/7bbbb8a0a9807710c9072e2531c2850d170a0265))
+
+
+### Bug Fixes
+
+* **telemetry:** exclude untimestamped points from lifetime total ([e20361d](https://github.com/KRoperUK/dimplex-controller-py/commit/e20361dad28d88aa4cd5a775152ea05bb819f0dc)), closes [#120](https://github.com/KRoperUK/dimplex-controller-py/issues/120)
+* **telemetry:** exclude untimestamped points from the lifetime energy total ([#123](https://github.com/KRoperUK/dimplex-controller-py/issues/123)) ([e20361d](https://github.com/KRoperUK/dimplex-controller-py/commit/e20361dad28d88aa4cd5a775152ea05bb819f0dc))
+
 ## [0.13.1](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.13.0...v0.13.1) (2026-09-16)
 
 
