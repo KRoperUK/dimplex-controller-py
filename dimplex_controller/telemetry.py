@@ -276,6 +276,11 @@ def summarise_energy(
     ``points`` may be raw cloud payloads or already-parsed
     :data:`TelemetryPoint` tuples. When raw, they are passed through
     :func:`parse_telemetry_points` first.
+
+    Points with no parseable timestamp (``ts is None``) are excluded from the
+    total in **every** mode. They cannot be placed on a calendar day, so
+    counting them only in ``lifetime`` would make the cumulative total disagree
+    with the sum of the per-day totals (dimplex-controller-py#120).
     """
     parsed: list[TelemetryPoint]
     if (
@@ -306,8 +311,16 @@ def summarise_energy(
             mode="daily",
         )
 
-    # lifetime — include every parseable point; window — optional start/end filter
-    selected = filter_telemetry_points(parsed, start=start, end=end, tz=tz) if mode == "window" else list(parsed)
+    # lifetime / window — totals must reconcile with the per-day totals, so a point
+    # with no parseable timestamp is dropped from both. A ``ts is None`` point cannot
+    # be placed on any calendar day (``daily``/``window`` already drop it via
+    # ``filter_telemetry_points``), so counting it only in the lifetime total made the
+    # cumulative meter disagree with the sum of its days — silent drift into the HA
+    # Energy Dashboard's TOTAL_INCREASING sensor (dimplex-controller-py#120).
+    if mode == "window":
+        selected = filter_telemetry_points(parsed, start=start, end=end, tz=tz)
+    else:
+        selected = [(ts, value) for ts, value in parsed if ts is not None]
 
     timestamps = [ts for ts, _ in selected if ts is not None]
     total = sum(v for _, v in selected)
