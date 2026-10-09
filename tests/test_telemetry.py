@@ -214,3 +214,42 @@ def test_summarise_from_raw_payload():
     summary = summarise_energy(raw, mode="lifetime")
     assert summary.total_kwh == 15.48
     assert summary.point_count == 2
+
+
+def test_summarise_lifetime_excludes_untimestamped_points():
+    """An untimestamped point must not inflate the lifetime total.
+
+    Before dimplex-controller-py#120 the lifetime path summed every parsed
+    point including ``ts is None`` ones, while daily/window dropped them — so
+    the cumulative total could never be reconciled against the sum of its days.
+    """
+    from dimplex_controller.telemetry import summarise_energy
+
+    points = [
+        (datetime(2026, 1, 1, tzinfo=timezone.utc), 1.0),
+        (None, 2.0),  # untimestamped — cannot be placed on any day
+        (datetime(2026, 1, 2, tzinfo=timezone.utc), 3.0),
+    ]
+
+    lifetime = summarise_energy(points, mode="lifetime")
+    # 1.0 + 3.0 — the untimestamped 2.0 is excluded.
+    assert lifetime.total_kwh == 4.0
+    assert lifetime.point_count == 2
+    assert lifetime.start == datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assert lifetime.end == datetime(2026, 1, 2, tzinfo=timezone.utc)
+
+    # Reconciliation: lifetime == sum of each day's daily total.
+    day1 = summarise_energy(points, mode="daily", now=datetime(2026, 1, 1, 12, tzinfo=timezone.utc))
+    day2 = summarise_energy(points, mode="daily", now=datetime(2026, 1, 2, 12, tzinfo=timezone.utc))
+    assert day1.total_kwh + day2.total_kwh == lifetime.total_kwh
+
+
+def test_summarise_lifetime_all_untimestamped_is_zero():
+    """A payload of only untimestamped points totals 0 — none can be placed on a day."""
+    from dimplex_controller.telemetry import summarise_energy
+
+    summary = summarise_energy([(None, 5.0), (None, 1.0)], mode="lifetime")
+    assert summary.total_kwh == 0.0
+    assert summary.point_count == 0
+    assert summary.start is None
+    assert summary.end is None
