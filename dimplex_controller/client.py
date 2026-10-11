@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import random
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -36,6 +37,7 @@ from .models import (
     ApplianceModeSettings,
     ApplianceModeStatus,
     ApplianceStatus,
+    HeatPumpHwcSchedule,
     Hub,
     HygieneFrequency,
     ProductModel,
@@ -840,6 +842,42 @@ class DimplexControl:
             endpoint=endpoint,
         )
 
+    async def set_hot_water_holiday(
+        self,
+        hub_id: str,
+        appliance_ids: list[str],
+        until: datetime | None = None,
+        *,
+        enable: bool = True,
+        heat_pump: bool = False,
+    ) -> None:
+        """Put a cylinder on Holiday (standby) until ``until``, or clear it.
+
+        Verified on a live ASHW cylinder (EDL200UK-630RF) with ``heat_pump=True``:
+        engaging moved ``ApplianceModes`` 8192 → 8200 and set
+        ``HolidayNumOfDays``, heating stopped, and clearing restored 8192. The
+        cylinder counts holidays in whole days, so ``until`` is also sent as a
+        rounded-up day count; a caller that wants a time of day has to clear
+        Holiday itself at that time.
+        """
+        days = 0
+        if enable:
+            if until is None:
+                raise ValueError("a holiday needs an end time")
+            end = until if until.tzinfo is not None else until.replace(tzinfo=timezone.utc)
+            seconds = (end - datetime.now(timezone.utc)).total_seconds()
+            days = max(1, math.ceil(seconds / 86400))
+        endpoint = "/RemoteControl/SetApplianceModeHeatPumpHwc" if heat_pump else "/RemoteControl/SetApplianceModeHwc"
+        await self.set_mode_flag(
+            hub_id,
+            appliance_ids,
+            ApplianceModeFlag.HOLIDAY,
+            enable=enable,
+            until=until,
+            number_of_days=days,
+            endpoint=endpoint,
+        )
+
     async def set_hot_water_boost_temperature(
         self, hub_id: str, appliance_ids: list[str], temperature: float, *, enable: bool = True
     ) -> None:
@@ -902,10 +940,12 @@ class DimplexControl:
             endpoint=endpoint,
         )
 
-    async def get_heat_pump_hot_water_schedule(self, hub_id: str, appliance_id: str) -> TimerModeSettings:
-        """Read an ASHW cylinder's schedule.
+    async def get_heat_pump_hot_water_schedule(self, hub_id: str, appliance_id: str) -> HeatPumpHwcSchedule:
+        """Read an ASHW cylinder's weekly schedule.
 
-        .. warning:: Untested — APK-confirmed only.
+        Verified on a live ASHW cylinder (EDL200UK-630RF). The reply does not fit
+        :class:`TimerModeSettings` — there is no ``TimerMode`` and each period is
+        ``{DayOfWeek, StartTime, Mode}`` — hence :class:`HeatPumpHwcSchedule`.
         """
         payload = {"HubId": hub_id, "ApplianceId": appliance_id}
         data = await self._request(
@@ -913,12 +953,16 @@ class DimplexControl:
             "/RemoteControl/ApiGetTimerModeDetailsForHeatPumpHwcAppliance",
             json=payload,
         )
-        return TimerModeSettings.model_validate(data)
+        return HeatPumpHwcSchedule.model_validate(data)
 
     async def set_heat_pump_hot_water_schedule(self, settings: TimerModeSettings) -> TimerModeSettings:
         """Write an ASHW cylinder's schedule periods.
 
-        .. warning:: Untested — APK-confirmed only.
+        .. warning:: Does not work yet. On a live ASHW cylinder this endpoint
+           answered HTTP 403 to every body tried — wrapped in ``TimerModeSettings``
+           or ``Settings``, with or without ``TimerMode``, integer or ``HH:MM:SS``
+           times, and app versions up to 3.0.0 — while unwrapped bodies got 400.
+           The request the official app sends has not been captured.
         """
         payload = {"TimerModeSettings": settings.model_dump(mode="json")}
         await self._request("POST", "/RemoteControl/UpdateHeatPumpHwcSchedulePeriods", json=payload)
