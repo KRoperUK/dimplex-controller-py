@@ -259,7 +259,9 @@ Main client class. Construct with an `aiohttp.ClientSession` and a `refresh_toke
 | `set_setback_temperature(...)` | Write the setback temperature (untested). |
 | `set_eco_start(hub_id, appliance_ids, enable)` | Toggle EcoStart. |
 | `set_open_window_detection(hub_id, appliance_ids, enable)` | Toggle Open Window Detection. |
-| `set_hot_water_*(...)` / `*_heat_pump_hot_water_schedule(...)` | Hot-water cylinder surface (untested — no hardware). |
+| `set_hot_water_holiday(hub_id, appliance_ids, until, *, enable, heat_pump)` | Cylinder Holiday on/off (validated on an ASHW cylinder). |
+| `get_heat_pump_hot_water_schedule(...)` | ASHW cylinder schedule as `HeatPumpHwcSchedule` (validated). Writing it answers 403. |
+| `set_hot_water_*(...)` | Remaining cylinder controls (untested — no hardware). |
 | `get_tsi_energy_report(hub_id, ...)` | Returns `TsiEnergyReport`. |
 | `capabilities_for(appliance, *, status, product)` | Derive an `ApplianceCapabilities` matrix. |
 | `export_tokens()` / `apply_tokens(bundle)` | Token persistence helpers. |
