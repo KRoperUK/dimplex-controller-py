@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import aiohttp
 import pytest
@@ -12,9 +13,12 @@ from dimplex_controller.client import DimplexControl
 from dimplex_controller.const import NO_SETPOINT_SENTINEL, NULL_DATETIME
 from dimplex_controller.models import (
     ApplianceModeFlag,
+    HeatPumpHwcPeriod,
+    HeatPumpHwcSchedule,
     HygieneFrequency,
     SetbackStatus,
     TimerMode,
+    TimerModeSettings,
     TimerPeriod,
     Zone,
 )
@@ -492,28 +496,81 @@ async def test_set_hot_water_mode_selects_heat_pump_endpoint(aresponses):
     ]
 
 
+# The reply a live ASHW cylinder (EDL200UK-630RF) gave: one period per day.
+_ASHW_SCHEDULE = {
+    "HubId": "hub-1",
+    "ApplianceId": "a-1",
+    "TimerPeriods": [{"DayOfWeek": d, "StartTime": 0, "Mode": 2} for d in (1, 2, 3, 4, 5, 6, 0)],
+}
+
+
 @pytest.mark.asyncio
-async def test_heat_pump_hot_water_schedule_round_trip(aresponses):
-    """The ASHW schedule is read then written back through its own endpoints."""
+async def test_heat_pump_hot_water_schedule_reads_the_live_shape(aresponses):
+    """The ASHW schedule has no TimerMode and a Mode per period."""
+    aresponses.add(
+        HOST,
+        "/api/RemoteControl/ApiGetTimerModeDetailsForHeatPumpHwcAppliance",
+        "POST",
+        _json(aresponses, json.dumps(_ASHW_SCHEDULE)),
+    )
+    async with aiohttp.ClientSession() as session:
+        schedule = await _authed(session).get_heat_pump_hot_water_schedule("hub-1", "a-1")
+
+    assert isinstance(schedule, HeatPumpHwcSchedule)
+    assert len(schedule.TimerPeriods) == 7
+    assert schedule.TimerPeriods[-1] == HeatPumpHwcPeriod(DayOfWeek=0, StartTime=0, Mode=2)
+
+
+@pytest.mark.asyncio
+async def test_heat_pump_hot_water_schedule_write_posts_timer_mode_settings(aresponses):
+    """The write is unchanged (and answers 403 on a live cylinder; see its docstring)."""
     captured: dict = {}
 
     async def write_handler(request):
         captured["body"] = await request.json()
         return _json(aresponses)
 
-    aresponses.add(
-        HOST,
-        "/api/RemoteControl/ApiGetTimerModeDetailsForHeatPumpHwcAppliance",
-        "POST",
-        _json(aresponses, _TIMER_BODY),
-    )
     aresponses.add(HOST, "/api/RemoteControl/UpdateHeatPumpHwcSchedulePeriods", "POST", write_handler)
+    settings = TimerModeSettings.model_validate(json.loads(_TIMER_BODY))
+    async with aiohttp.ClientSession() as session:
+        await _authed(session).set_heat_pump_hot_water_schedule(settings)
 
+    assert captured["body"]["TimerModeSettings"]["ApplianceId"] == settings.ApplianceId
+
+
+@pytest.mark.asyncio
+async def test_set_hot_water_holiday_sends_holiday_with_rounded_up_days(aresponses):
+    """The body that engaged and cleared Holiday on a live ASHW cylinder."""
+    bodies: list[tuple[str, dict]] = []
+
+    async def handler(request):
+        bodies.append((request.path, await request.json()))
+        return _json(aresponses, "true")
+
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceModeHeatPumpHwc", "POST", handler)
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceModeHeatPumpHwc", "POST", handler)
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceModeHwc", "POST", handler)
+
+    until = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=2, hours=3)
     async with aiohttp.ClientSession() as session:
         client = _authed(session)
-        settings = await client.get_heat_pump_hot_water_schedule("hub-1", "a-1")
-        settings.TimerPeriods[0].Temperature = 55.0
-        await client.set_heat_pump_hot_water_schedule(settings)
+        await client.set_hot_water_holiday("hub-1", ["a-1"], until, heat_pump=True)
+        await client.set_hot_water_holiday("hub-1", ["a-1"], enable=False, heat_pump=True)
+        await client.set_hot_water_holiday("hub-1", ["a-1"], until)
+        with pytest.raises(ValueError):
+            await client.set_hot_water_holiday("hub-1", ["a-1"])
 
-    assert len(settings.TimerPeriods) == 2
-    assert captured["body"]["TimerModeSettings"]["TimerPeriods"][0]["Temperature"] == 55.0
+    path, on = bodies[0]
+    assert path == "/api/RemoteControl/SetApplianceModeHeatPumpHwc"
+    assert on["ApplianceIds"] == ["a-1"]
+    assert on["Settings"]["ApplianceModes"] == int(ApplianceModeFlag.HOLIDAY)
+    assert on["Settings"]["Status"] == 1
+    assert on["Settings"]["NumberOfDays"] == 3
+    assert on["Settings"]["Date"] == until.replace(tzinfo=None).isoformat()
+
+    _, off = bodies[1]
+    assert off["Settings"]["Status"] == 0
+    assert off["Settings"]["NumberOfDays"] == 0
+    assert off["Settings"]["Date"] == NULL_DATETIME
+
+    assert bodies[2][0] == "/api/RemoteControl/SetApplianceModeHwc"
