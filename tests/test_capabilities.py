@@ -107,3 +107,71 @@ def test_as_dict_includes_presets():
     data = caps.as_dict()
     assert data["boost"] is False
     assert data["climate_presets"] == ["comfort", "away"]
+
+
+# GetApplianceOverview row from a live ASHW cylinder (EDL200UK-630RF).
+_LIVE_CYLINDER = {
+    "HubId": "h1",
+    "ApplianceId": "a1",
+    "ZoneId": "z1",
+    "StatusTwo": 0,
+    "ApplianceModes": 8192,
+    "RoomTemperature": None,
+    "ActiveSetPointTemperature": 45,
+    "BoostDuration": 0,
+    "BoostTemperature": None,
+    "AwayDateTime": None,
+    "AwayTemperature": None,
+    "OpenWindowEnabled": None,
+    "EcoStartEnabled": None,
+    "SetbackEnabled": None,
+    "SetbackTemperature": None,
+    "AvailableHotWater": 336,
+    "Capacity": 200,
+    "ErrorCode": 0,
+    "WarningCode": 0,
+}
+
+
+def _ashw() -> Appliance:
+    return Appliance(
+        ApplianceId="a1",
+        ApplianceType="ASHW Cylinder",
+        ApplianceModel="EDL200UK-630RF",
+        ZoneId="z1",
+        FriendlyName="Hot Water",
+        ZoneName="Hot water",
+    )
+
+
+def test_live_cylinder_is_not_room_climate():
+    """Its water target in ActiveSetPointTemperature must not make it a thermostat."""
+    caps = capabilities_for(_ashw(), status=ApplianceStatus.model_validate(_LIVE_CYLINDER))
+    assert caps.hot_water is True and caps.heat_pump is True
+    assert caps.climate is False
+    for flag in (
+        "away",
+        "advance",
+        "open_window",
+        "eco_start",
+        "setback_read",
+        "setback_write",
+        "frost",
+        "setpoint_write",
+    ):
+        assert getattr(caps, flag) is False, flag
+    # BoostDuration is reported (0), and a cylinder does have a boost.
+    assert caps.boost is True
+
+
+def test_cylinder_with_a_room_temperature_is_room_climate():
+    status = ApplianceStatus.model_validate({**_LIVE_CYLINDER, "RoomTemperature": 19})
+    caps = capabilities_for(_ashw(), status=status)
+    assert caps.climate is True
+    assert caps.open_window is True and caps.setpoint_write is True
+
+
+def test_room_heater_keeps_every_feature_without_status():
+    caps = capabilities_for()
+    assert caps.climate is True
+    assert caps.open_window and caps.eco_start and caps.away and caps.frost and caps.setpoint_write
