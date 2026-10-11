@@ -150,21 +150,39 @@ the control/reporting-relevant ones are listed here. Method names are the
 > `SetApplianceSetpointTemperature` for setpoints and `SetApplianceMode`
 > (FrostProtect) for "off".
 
-### RemoteControl — hot-water cylinders (❌ not owned — APK-confirmed only)
+### RemoteControl — hot-water cylinders (partly validated on an ASHW cylinder)
 
 Applies to `WaterHeater` and heat-pump `ASHW Cylinder` models. All reuse
 `SetApplianceModeRequest` / `ApplianceModeSettings`.
 
-| Endpoint | Method | Mode used | 📦 |
-| --- | --- | --- | --- |
-| `/RemoteControl/SetApplianceModeHwc` | `SetModeForHWAppliances` | Boost/Normal/… | ✅ |
-| `/RemoteControl/SetBoostTemperatureHwc` | `SetHWBoostTemperature` | `Boost`, Temperature | ✅ |
-| `/RemoteControl/SetNormalTemperatureHwc` | `SetHWNormalTemperature` | `Normal`, Temperature | ✅ |
-| `/RemoteControl/SetHygieneSettingsHwc` | `SetHWHygieneSettings` | `Hygiene`, Temperature, `Frequency` | ✅ |
-| `/RemoteControl/SetApplianceModeHeatPumpHwc` | `SetModeForHeatPumpHWAppliances` | — | ✅ |
-| `/RemoteControl/SetHygieneSettingsHeatPumpHwc` | `SetHeatPumpHWCHygieneSettings` | `Hygiene` | ✅ |
-| `/RemoteControl/ApiGetTimerModeDetailsForHeatPumpHwcAppliance` | `ApiGetTimerModeDetailsForHeatPumpHwcAppliance` → details | `{HubId, ApplianceId}` | ✅ |
-| `/RemoteControl/UpdateHeatPumpHwcSchedulePeriods` | schedule edit | — | ✅ |
+| Endpoint | Method | Mode used | 📦 | 🔬 live (EDL200UK-630RF) |
+| --- | --- | --- | --- | --- |
+| `/RemoteControl/SetApplianceModeHwc` | `SetModeForHWAppliances` | Boost/Normal/… | ✅ | — not an ASHW endpoint |
+| `/RemoteControl/SetBoostTemperatureHwc` | `SetHWBoostTemperature` | `Boost`, Temperature | ✅ | — not tested |
+| `/RemoteControl/SetNormalTemperatureHwc` | `SetHWNormalTemperature` | `Normal`, Temperature | ✅ | — not tested |
+| `/RemoteControl/SetHygieneSettingsHwc` | `SetHWHygieneSettings` | `Hygiene`, Temperature, `Frequency` | ✅ | — not tested |
+| `/RemoteControl/SetApplianceModeHeatPumpHwc` | `SetModeForHeatPumpHWAppliances` | `Holiday` | ✅ | ✅ Holiday on/off (`set_hot_water_holiday`) |
+| `/RemoteControl/SetHygieneSettingsHeatPumpHwc` | `SetHeatPumpHWCHygieneSettings` | `Hygiene` | ✅ | — not tested |
+| `/RemoteControl/ApiGetTimerModeDetailsForHeatPumpHwcAppliance` | `ApiGetTimerModeDetailsForHeatPumpHwcAppliance` → details | `{HubId, ApplianceId}` | ✅ | ✅ reads (`HeatPumpHwcSchedule`) |
+| `/RemoteControl/UpdateHeatPumpHwcSchedulePeriods` | schedule edit | — | ✅ | ❌ HTTP 403 to every body tried |
+
+What a live ASHW cylinder returned:
+
+- **Overview:** `ApplianceModes` 8192 (`Normal`, which the app shows as "Timer"),
+  `ActiveSetPointTemperature` 45 (the *water* target), `AvailableHotWater` 336 (litres —
+  the app shows "336 L Hot water"), `Capacity` 200, `HeatingUp`, `IsGreenEnergyActive`,
+  `HygieneFrequency` 7, `HolidayNumOfDays`, and `ErrorCode`/`WarningCode` as **integers**.
+  Every room-heater field (`RoomTemperature`, `OpenWindowEnabled`, `EcoStartEnabled`, setback,
+  away) is `null`.
+- **Holiday:** `SetApplianceModeHeatPumpHwc` with `ApplianceModes` = 8, `Status` 1,
+  `Date` and `NumberOfDays` moved the status to 8200 with `HolidayNumOfDays` set and heating
+  stopped; `Status` 0 restored 8192.
+- **Schedule:** `{HubId, ApplianceId, TimerPeriods: [{DayOfWeek, StartTime: 0, Mode: 2}]}` —
+  one period per day, no `TimerMode`. What `Mode` values mean, and whether `StartTime` is
+  minutes after midnight, is not yet known.
+- **Schedule write:** wrapped bodies (`TimerModeSettings` or `Settings`, with or without
+  `TimerMode`, integer or `HH:MM:SS` times, `app_version` up to 3.0.0) all got **403**;
+  unwrapped bodies got **400**. The app's own request has not been captured.
 
 ### Reports / profiles / structure (context)
 
@@ -211,10 +229,10 @@ Every ❌ in the "before 0.13.0" column above is now addressed:
 | "Off" | `set_frost_protect()` / `turn_off()` |
 | Advance / Manual / Eco modes | `set_advance()`, `set_manual()`, `set_eco_mode()` |
 | Setback write | `set_setback_temperature()`; capability `setback_write=True` |
-| HWC / heat-pump HWC | `set_hot_water_*`, `get/set_heat_pump_hot_water_schedule` — implemented but ❌ untested |
+| HWC / heat-pump HWC | `set_hot_water_*`, `get/set_heat_pump_hot_water_schedule` — implemented; Holiday and the schedule read since validated on an ASHW cylinder |
 | Temperature range | `MODE_TEMP_MIN`/`MAX` = 7–30 °C for Boost/Frost/Manual/Eco; capability `min_temp` corrected from 5 → 7 |
 
-Still open: live validation of `SetSetbackTemperature` and the entire HWC surface.
+Still open: live validation of `SetSetbackTemperature` and the HWC temperature, boost and hygiene writes.
 
 ### What 0.13.1 changed
 
@@ -254,7 +272,10 @@ Still open: live validation of `SetSetbackTemperature` and the entire HWC surfac
 - **Additionally validated live on a QM100RF:** Boost/Away flag values, the
   `Status` engage/clear semantics, `BoostDuration`, and the dedicated
   `SetApplianceSetpointTemperature` endpoint.
-- **APK-only (no hardware):** all HWC / heat-pump-HWC endpoints and `SetSetbackTemperature`.
+- **Additionally validated live on an ASHW cylinder (EDL200UK-630RF):** the cylinder overview
+  fields, Holiday on/off via `SetApplianceModeHeatPumpHwc`, and the heat-pump schedule read.
+  `UpdateHeatPumpHwcSchedulePeriods` answers 403.
+- **APK-only (no hardware):** the remaining HWC endpoints and `SetSetbackTemperature`.
 - **Resolved:** whether a *raised* Away target (>7) is honoured on Quantum — it is.
   Away is a settable **7–18 °C** setback that *defaults* to 7 (anti-freeze), so the
   common case is a low setpoint by design; a higher chosen value applies up to 18,
