@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.13.1...v0.14.0) (2026-10-17)
+
+
+### Features
+
+* **exceptions:** classify DimplexApiError as transient (5xx/429) or hard (4xx) ([#125](https://github.com/KRoperUK/dimplex-controller-py/issues/125)) ([7bbbb8a](https://github.com/KRoperUK/dimplex-controller-py/commit/7bbbb8a0a9807710c9072e2531c2850d170a0265))
+* **exceptions:** classify DimplexApiError as transient or hard ([7bbbb8a](https://github.com/KRoperUK/dimplex-controller-py/commit/7bbbb8a0a9807710c9072e2531c2850d170a0265))
+
+
+### Bug Fixes
+
+* **models:** accept integer ErrorCode/WarningCode in ApplianceStatus ([#127](https://github.com/KRoperUK/dimplex-controller-py/issues/127)) ([92ae506](https://github.com/KRoperUK/dimplex-controller-py/commit/92ae50668ae45bb4db8c411fdcd0632a858a103f))
+* **telemetry:** exclude untimestamped points from lifetime total ([e20361d](https://github.com/KRoperUK/dimplex-controller-py/commit/e20361dad28d88aa4cd5a775152ea05bb819f0dc)), closes [#120](https://github.com/KRoperUK/dimplex-controller-py/issues/120)
+* **telemetry:** exclude untimestamped points from the lifetime energy total ([#123](https://github.com/KRoperUK/dimplex-controller-py/issues/123)) ([e20361d](https://github.com/KRoperUK/dimplex-controller-py/commit/e20361dad28d88aa4cd5a775152ea05bb819f0dc))
+
+
+### Documentation
+
+* **telemetry:** document the seconds-vs-ms epoch boundary assumption ([4a13e64](https://github.com/KRoperUK/dimplex-controller-py/commit/4a13e64323b3d0fccc245dc4a7a22f7747ed7736)), closes [#121](https://github.com/KRoperUK/dimplex-controller-py/issues/121)
+* **telemetry:** document the seconds-vs-ms epoch boundary assumption ([#121](https://github.com/KRoperUK/dimplex-controller-py/issues/121)) ([#126](https://github.com/KRoperUK/dimplex-controller-py/issues/126)) ([4a13e64](https://github.com/KRoperUK/dimplex-controller-py/commit/4a13e64323b3d0fccc245dc4a7a22f7747ed7736))
+
 ## [0.13.1](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.13.0...v0.13.1) (2026-09-16)
 
 
