@@ -117,6 +117,15 @@ def _coerce_timestamp(raw: Any) -> datetime | None:
         return raw
     if isinstance(raw, int | float):
         ts = float(raw)
+        # Seconds-vs-milliseconds disambiguation is magnitude-only, which is safe for
+        # the data this parses: a Unix *seconds* epoch does not reach 1e12 until the
+        # year ~33658, and the cloud emits second-resolution `TS` values, so anything
+        # above the threshold is a millisecond epoch. The converse edge is not
+        # defended — a millisecond epoch before 2001-09-09 (< 1e12) would be misread
+        # as seconds — because the cloud has never produced one. A value just below
+        # 1e12 read as seconds lands past datetime's representable range and is
+        # dropped by the guard below rather than mis-parsed. See
+        # dimplex-controller-py#121 for why this is intentional rather than a gap.
         if ts > 1e12:
             ts = ts / 1000.0
         try:
