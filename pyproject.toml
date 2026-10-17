@@ -1,6 +1,6 @@
 [project]
 name = "dimplex-controller"
-version = "0.13.1"
+version = "0.14.0"
 description = "Unofficial async Python client for Dimplex (GDHV IoT) heating appliances — not affiliated with Glen Dimplex"
 authors = [{ name = "Kieran Roper" }]
 license = "MIT"
