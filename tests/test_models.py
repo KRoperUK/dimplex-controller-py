@@ -260,6 +260,17 @@ def test_appliance_status_model_full():
     assert status.EcoStartEnabled is False
 
 
+def test_appliance_status_accepts_integer_error_and_warning_codes():
+    """GetApplianceOverview sends ErrorCode/WarningCode as integers."""
+    status = ApplianceStatus.model_validate(
+        {"HubId": "h1", "ApplianceId": "a1", "ZoneId": "z1", "ErrorCode": 0, "WarningCode": 3}
+    )
+    assert status.ErrorCode == "0"
+    assert status.WarningCode == "3"
+    assert _status(ErrorCode="E1").ErrorCode == "E1"
+    assert _status().ErrorCode is None
+
+
 def test_appliance_mode_settings_model():
     """Test ApplianceModeSettings model."""
     settings = ApplianceModeSettings(
