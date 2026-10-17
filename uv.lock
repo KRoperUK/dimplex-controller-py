@@ -711,7 +711,7 @@ wheels = [
 
 [[package]]
 name = "dimplex-controller"
-version = "0.13.1"
+version = "0.14.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
@@ -733,8 +733,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiohttp", specifier = ">=3.14.3,<4" },
-    { name = "pydantic", specifier = ">=2.13.5,<3" },
+    { name = "aiohttp", specifier = ">=3.9.0,<4" },
+    { name = "pydantic", specifier = ">=2.0.0,<3" },
 ]
 
 [package.metadata.requires-dev]
