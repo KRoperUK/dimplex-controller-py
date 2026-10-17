@@ -61,6 +61,31 @@ def test_epoch_seconds_and_milliseconds():
     assert out[1][0] == datetime.fromtimestamp(1717200000, tz=timezone.utc)
 
 
+def test_epoch_seconds_ms_threshold_boundary():
+    """Pin the magnitude threshold: values <= 1e12 are seconds, > 1e12 are ms.
+
+    Documents the boundary assumption in dimplex-controller-py#121 — a seconds
+    epoch does not reach 1e12 until the year ~33658, so the cloud's second-
+    resolution ``TS`` is always read as seconds, and only a value above the
+    threshold is divided down from milliseconds. A value just below the
+    threshold, read as seconds, lands in year ~33658 which ``datetime`` cannot
+    represent, so it is dropped (the ``OverflowError``/``ValueError`` guard
+    returns ``None``) rather than silently mis-parsed.
+    """
+    # Just below the threshold: read as SECONDS -> year ~33658 -> unrepresentable -> dropped.
+    below = parse_telemetry_points([{"timestamp": int(1e12) - 1, "value": 1.0}])
+    assert below == [(None, 1.0)]
+
+    # Just above the threshold: read as MILLISECONDS (divided by 1000) -> a real date.
+    above = parse_telemetry_points([{"timestamp": int(1e12) + 1, "value": 1.0}])
+    assert above[0][0] == datetime.fromtimestamp((1e12 + 1) / 1000.0, tz=timezone.utc)
+    assert above[0][0].year < 2100
+
+    # A normal second-resolution epoch (the cloud's real shape) is read as seconds.
+    normal = parse_telemetry_points([{"timestamp": 1_717_200_000, "value": 1.0}])
+    assert normal[0][0] == datetime.fromtimestamp(1_717_200_000, tz=timezone.utc)
+
+
 def test_bad_entries_skipped_but_partial_kept():
     """A bad timestamp keeps the value; entries with no value at all are dropped."""
     points = [

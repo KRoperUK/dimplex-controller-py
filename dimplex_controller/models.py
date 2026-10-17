@@ -255,6 +255,31 @@ class TimerModeSettings(BaseModel):
     TimerPeriods: list[TimerPeriod] = Field(default_factory=list)
 
 
+class HeatPumpHwcPeriod(BaseModel):
+    """One period of an ASHW cylinder's weekly schedule.
+
+    A live cylinder returns one ``{DayOfWeek, StartTime: 0, Mode: 2}`` per day.
+    ``DayOfWeek`` is .NET's (0 = Sunday). ``StartTime`` is an integer, presumed
+    minutes after midnight, and what each ``Mode`` value means is not yet known.
+    """
+
+    DayOfWeek: int
+    StartTime: int
+    Mode: int
+
+
+class HeatPumpHwcSchedule(BaseModel):
+    """``ApiGetTimerModeDetailsForHeatPumpHwcAppliance`` reply.
+
+    Unlike the room-heater :class:`TimerModeSettings` it has no ``TimerMode``
+    and its periods carry a mode instead of an end time and temperature.
+    """
+
+    HubId: str
+    ApplianceId: str
+    TimerPeriods: list[HeatPumpHwcPeriod] = Field(default_factory=list)
+
+
 class UserContext(BaseModel):
     Id: str
     EmailAddress: str | None = None
@@ -286,6 +311,29 @@ class ApplianceStatus(BaseModel):
     LockStatus: int | None = None
     ErrorCode: str | None = None
     WarningCode: str | None = None
+    # Hot-water cylinder fields, as a live ASHW cylinder (EDL200UK-630RF) sends
+    # them. AvailableHotWater above is litres of usable hot water (the app shows
+    # it as "336 L Hot water").
+    Capacity: int | None = None  # tank size, litres
+    HeatingUp: bool | None = None
+    IsGreenEnergyActive: bool | None = None
+    HygieneFrequency: int | None = None  # EFrequency, see HygieneFrequency
+    HygieneTemperature: float | None = None
+    HolidayNumOfDays: int | None = None
+    # Present in the same reply, always null on the cylinder seen so far.
+    DelayedStartTime: str | None = None
+    DsmStatus: int | None = None
+    ModifiedPower: float | None = None
+    ConnectedChargeProfiles: Any = None
+    StandaloneChargeProfiles: Any = None
+
+    @field_validator("ErrorCode", "WarningCode", mode="before")
+    @classmethod
+    def _coerce_code(cls, value: Any) -> Any:
+        # GetApplianceOverview sends these as integers (0 when healthy).
+        if isinstance(value, int) and not isinstance(value, bool):
+            return str(value)
+        return value
 
     @property
     def mode_flags(self) -> ApplianceModeFlag:
