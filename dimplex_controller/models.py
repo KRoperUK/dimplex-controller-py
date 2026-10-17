@@ -335,6 +335,14 @@ class ApplianceStatus(BaseModel):
             return str(value)
         return value
 
+    @field_validator("ErrorCode", "WarningCode", mode="before")
+    @classmethod
+    def _coerce_code(cls, value: Any) -> Any:
+        # GetApplianceOverview sends these as integers (0 when healthy).
+        if isinstance(value, int) and not isinstance(value, bool):
+            return str(value)
+        return value
+
     @property
     def mode_flags(self) -> ApplianceModeFlag:
         """Return ``ApplianceModes`` as a typed flag set."""
