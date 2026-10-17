@@ -633,7 +633,7 @@ paths:
 
   /RemoteControl/SetApplianceModeHeatPumpHwc:
     post:
-      summary: Set an ASHW (heat-pump) cylinder mode (untested)
+      summary: Set an ASHW (heat-pump) cylinder mode (Holiday validated live)
       requestBody:
         $ref: "#/components/requestBodies/ApplianceModeRequest"
       responses:
@@ -651,7 +651,7 @@ paths:
 
   /RemoteControl/ApiGetTimerModeDetailsForHeatPumpHwcAppliance:
     post:
-      summary: Read an ASHW cylinder's schedule (untested)
+      summary: Read an ASHW cylinder's schedule (validated live)
       requestBody:
         required: true
         content:
@@ -673,7 +673,7 @@ paths:
 
   /RemoteControl/UpdateHeatPumpHwcSchedulePeriods:
     post:
-      summary: Write an ASHW cylinder's schedule periods (untested)
+      summary: Write an ASHW cylinder's schedule periods (answers 403 on a live cylinder)
       requestBody:
         required: true
         content:
