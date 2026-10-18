@@ -21,12 +21,21 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Topic :: Home Automation",
 ]
-# Lower bounds are the versions this release was developed and tested against;
-# the upper bounds keep the previous caret semantics (a caret range is
-# `>=X,<next-major`), so consumers gain no surprise from the migration.
+# The upper bounds keep the previous caret semantics (a caret range is
+# `>=X,<next-major`), so consumers gain no surprise from the uv migration.
 dependencies = [
-    "aiohttp>=3.14.3,<4",
-    "pydantic>=2.13.5,<3",
+    # Lower bounds are what the code needs, not what uv.lock happens to resolve.
+    # They were raised to the locked versions when the project migrated to uv and
+    # bumped everything in one pass (#110), which made this library uninstallable
+    # alongside Home Assistant: the integration's test stack pins pydantic 2.13.4
+    # while this demanded >=2.13.5, so `dimplex-controller>=0.14.0` resolved to
+    # nothing and the HA integration could not adopt the 0.14.0 ErrorCode/WarningCode
+    # fix (dimplex-controller-hass#256).
+    #
+    # Nothing here needs either new API: plain ``BaseModel``, ``field_validator``,
+    # ``ConfigDict`` and an aiohttp ``ClientSession`` are all 2.0/3.9-era.
+    "aiohttp>=3.9.0,<4",
+    "pydantic>=2.0.0,<3",
 ]
 
 [project.urls]
