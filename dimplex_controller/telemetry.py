@@ -222,6 +222,34 @@ def parse_telemetry_points(
     return out
 
 
+def reported_energy(
+    points: Any,
+    *,
+    value_keys: tuple[str, ...] | None = None,
+) -> bool:
+    """Return True when telemetry carries usable points for an appliance.
+
+    The evidence-based counterpart to
+    :attr:`ApplianceCapabilities.energy_meter <.capabilities.ApplianceCapabilities>`,
+    which is a family hint derived from the nameplate and is therefore true for
+    essentially every appliance — it cannot separate a genuinely metered one from an
+    appliance the hub never reports energy for (dimplex-controller-py#113).
+
+    Pass the appliance's entry from
+    :attr:`TsiEnergyReport.ApplianceTelemetryData
+    <.models.TsiEnergyReport>` (raw entries are normalised by
+    :func:`parse_telemetry_points`, so both raw and already-parsed points are
+    accepted). Nothing recognised, an empty list, or a value the parser skips all
+    answer ``False`` — which is the question a consumer gating entity creation
+    actually has.
+
+    Only presence is decided here. A caller that also wants the figures should call
+    :func:`parse_telemetry_points` or :func:`summarise_energy` once and test the
+    result, rather than parse a series twice.
+    """
+    return bool(parse_telemetry_points(points, value_keys=value_keys))
+
+
 def _ensure_aware(ts: datetime, default_tz: tzinfo) -> datetime:
     """Return ``ts`` with a timezone; naive datetimes are assumed ``default_tz``."""
     if ts.tzinfo is None:

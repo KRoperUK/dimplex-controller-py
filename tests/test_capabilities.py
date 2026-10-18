@@ -2,6 +2,7 @@
 
 from dimplex_controller.capabilities import ApplianceCapabilities, capabilities_for
 from dimplex_controller.models import Appliance, ApplianceStatus, ProductModel
+from dimplex_controller.telemetry import reported_energy
 
 
 def test_default_capabilities_enable_common_controls():
@@ -175,3 +176,27 @@ def test_room_heater_keeps_every_feature_without_status():
     caps = capabilities_for()
     assert caps.climate is True
     assert caps.open_window and caps.eco_start and caps.away and caps.frost and caps.setpoint_write
+
+
+def test_energy_meter_is_a_family_hint_not_proof_of_metering():
+    """The flag cannot answer "has this reported energy?" — which is #113's point.
+
+    ``energy_meter`` is set from the nameplate (any positive ``ratedPower``) and from
+    product-type tokens, so it is true for most appliances, including ones the hub
+    never returns telemetry for. Gating entity creation on it would therefore either
+    do nothing for the appliances it was meant to help, or hide working entities from
+    an appliance whose provisioning is simply absent. The telemetry is the evidence.
+    """
+    appliance = Appliance(
+        ApplianceId="a1",
+        ApplianceType="Panel Heater",
+        ApplianceModel="PLX2000",
+        ZoneId="z1",
+        FriendlyName="Hall",
+        ZoneName="Hall",
+        ProductModelExtensions={"AUTOMATIC_PROVISIONING": '{"ratedPower": 2.0}'},
+    )
+
+    assert capabilities_for(appliance).energy_meter is True
+    # A nameplate says the appliance *could* be metered; this says whether it is.
+    assert reported_energy([]) is False

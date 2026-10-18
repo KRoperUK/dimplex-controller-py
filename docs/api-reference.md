@@ -349,7 +349,7 @@ Product catalogue entry with provisioning metadata (see `models.py`).
 ## Telemetry helpers
 
 ```python
-from dimplex_controller import parse_telemetry_points, summarise_energy
+from dimplex_controller import parse_telemetry_points, reported_energy, summarise_energy
 from dimplex_controller import VALUE_KEY_T1, VALUE_KEY_T2
 ```
 
@@ -364,6 +364,13 @@ Filter parsed points to a time window.
 ### `summarise_energy(points, mode="daily", now=..., tz=...)`
 
 Aggregate to daily/lifetime totals. Returns an `EnergySummary` with `total_kwh`, `point_count`, `start`, `end`.
+
+### `reported_energy(points, value_keys=VALUE_KEY_T1)`
+
+Whether an appliance has ever reported usable telemetry — pass its entry from
+`TsiEnergyReport.ApplianceTelemetryData`. This is the question to ask instead of
+gating on `ApplianceCapabilities.energy_meter`, which is a family hint derived from
+the nameplate and so is true for almost every appliance, metered or not (#113).
 
 ---
 

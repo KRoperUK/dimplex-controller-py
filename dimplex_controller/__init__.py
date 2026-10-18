@@ -64,6 +64,7 @@ from .telemetry import (
     EnergySummary,
     filter_telemetry_points,
     parse_telemetry_points,
+    reported_energy,
     summarise_energy,
 )
 
@@ -102,6 +103,7 @@ __all__ = [
     "NULL_DATETIME",
     "parse_telemetry_points",
     "filter_telemetry_points",
+    "reported_energy",
     "summarise_energy",
     "EnergySummary",
     "VALUE_KEY_T1",

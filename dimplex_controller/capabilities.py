@@ -24,6 +24,14 @@ class ApplianceCapabilities:
     Flags are best-effort: when status/product metadata is incomplete the
     library prefers enabling known cloud control paths (boost/away/OWD) so
     users are not locked out of working RPCs.
+
+    One flag is weaker than the rest and must not be used as a gate:
+    :attr:`energy_meter` is a *family hint* derived from the nameplate, so it is
+    true for essentially every appliance with a rated power. When the question is
+    "has this appliance ever reported energy?", ask the telemetry —
+    :func:`dimplex_controller.reported_energy`, or
+    :func:`dimplex_controller.summarise_energy` when the totals are wanted too
+    (dimplex-controller-py#113).
     """
 
     boost: bool = True
@@ -39,6 +47,7 @@ class ApplianceCapabilities:
     # setpoint path. Preferred over rewriting the schedule via SetTimerMode,
     # which Quantum rejects with HTTP 403.
     setpoint_write: bool = True
+    # Family hint, not proof of metering — see the class docstring before gating on it.
     energy_meter: bool = False
     storage: bool = False
     hot_water: bool = False
