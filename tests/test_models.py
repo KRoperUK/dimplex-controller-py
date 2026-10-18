@@ -414,3 +414,36 @@ def test_timer_period_empty_time_returns_none():
     period = TimerPeriod(DayOfWeek=0, StartTime="", EndTime="", Temperature=18.0)
     assert period.start_time_obj is None
     assert period.end_time_obj is None
+
+
+def test_appliance_status_keeps_cylinder_fields():
+    """A live ASHW cylinder's overview row, including the cylinder-only fields."""
+    status = ApplianceStatus.model_validate(
+        {
+            "HubId": "h1",
+            "ApplianceId": "a1",
+            "ZoneId": "z1",
+            "ApplianceModes": 8192,
+            "ActiveSetPointTemperature": 45,
+            "AvailableHotWater": 336,
+            "HygieneTemperature": None,
+            "HygieneFrequency": 7,
+            "HolidayNumOfDays": 0,
+            "Capacity": 200,
+            "ErrorCode": 0,
+            "WarningCode": 0,
+            "IsGreenEnergyActive": True,
+            "HeatingUp": False,
+            "ConnectedChargeProfiles": None,
+            "StandaloneChargeProfiles": None,
+            "ModifiedPower": None,
+            "DsmStatus": None,
+            "DelayedStartTime": None,
+        }
+    )
+    assert status.Capacity == 200
+    assert status.IsGreenEnergyActive is True
+    assert status.HeatingUp is False
+    assert status.HygieneFrequency == HygieneFrequency.WEEKLY
+    assert status.HolidayNumOfDays == 0
+    assert status.has_mode(ApplianceModeFlag.NORMAL)

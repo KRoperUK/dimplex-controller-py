@@ -162,15 +162,23 @@ def capabilities_for(
         heat_pump = True
         hot_water = True
 
-    boost = True
-    away = True
+    if status is not None and status.AvailableHotWater is not None:
+        hot_water = True
+
+    # A cylinder reports its *water* target in ActiveSetPointTemperature (45 °C
+    # on a live ASHW cylinder), so only a room temperature makes it room climate.
+    # Without one, the room-heater features default to off — a live cylinder
+    # sends null for every one of them — unless its status reports them.
+    climate = not hot_water or (status is not None and status.RoomTemperature is not None)
+
+    boost = climate
+    away = climate
     advance = True
-    open_window = True
-    eco_start = True
-    setback_read = True
-    frost = True
+    open_window = climate
+    eco_start = climate
+    setback_read = climate
+    frost = climate
     timer = True
-    climate = not hot_water  # cylinder-only appliances are not room climate
 
     if status is not None:
         if status.BoostDuration is not None or status.BoostTemperature is not None:
@@ -183,10 +191,6 @@ def capabilities_for(
             eco_start = True
         if status.SetbackEnabled is not None or status.SetbackTemperature is not None:
             setback_read = True
-        if status.AvailableHotWater is not None:
-            hot_water = True
-        if status.RoomTemperature is not None or status.ActiveSetPointTemperature is not None:
-            climate = True
 
     # Advance only means something for a scheduled room heater; a cylinder has
     # no "next comfort period" to jump to.
@@ -200,10 +204,11 @@ def capabilities_for(
         open_window=open_window,
         eco_start=eco_start,
         setback_read=setback_read,
-        setback_write=True,
+        setback_write=climate,
         frost=frost,
         timer=timer,
-        setpoint_write=True,
+        # The room setpoint endpoint; cylinders have their own (Set*TemperatureHwc).
+        setpoint_write=climate,
         energy_meter=energy_meter,
         storage=storage,
         hot_water=hot_water,
