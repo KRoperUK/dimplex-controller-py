@@ -160,13 +160,42 @@ jobs:
       - name: Run tests with coverage
         run: uv run pytest --cov=dimplex_controller --cov-report=term-missing
 
+  # `uv.lock` records the *root project's* version, so bumping the version in
+  # `pyproject.toml` — which is all a release-please PR does — leaves the lock
+  # stale. Nothing caught that: `uv sync --frozen` trusts the lock, and `uv run`
+  # silently rewrites it, so the drift was invisible until someone ran a command
+  # that happened to repair it. Both the 0.14.0 and 0.15.0 releases left `main`
+  # recording the previous version.
+  #
+  # Skipped for release-please's own branch, and deliberately: that PR bumps the
+  # version by definition, so this would fail on every release, and a release that
+  # cannot satisfy a check only it can trigger is worse than the drift. Re-lock on
+  # `main` after the release merges — `uv lock`, commit, done. CONTRIBUTING.md says
+  # the same thing under Releases.
+  lockfile:
+    needs: changes
+    if: >-
+      needs.changes.outputs.code == 'true' &&
+      !startsWith(github.head_ref, 'release-please--')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
+      - name: Check uv.lock is current
+        run: uv lock --check
+
   # Stable required status check for the `main` branch ruleset.
-  # - Python/code changes: fails unless lint, pre-commit, and the full test matrix succeed
+  # - Python/code changes: fails unless lint, pre-commit, lockfile and the full test
+  #   matrix succeed
   # - Docs changes: fails unless the markdown guard succeeds
   # - Other changes: succeeds without running the heavy jobs
   ci:
     name: ci
-    needs: [changes, docs, lint, pre-commit, test]
+    needs: [changes, docs, lint, pre-commit, lockfile, test]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -181,6 +210,7 @@ jobs:
           echo "docs: ${{ needs.docs.result }}"
           echo "lint: ${{ needs.lint.result }}"
           echo "pre-commit: ${{ needs.pre-commit.result }}"
+          echo "lockfile: ${{ needs.lockfile.result }}"
           echo "test: ${{ needs.test.result }}"
 
           failed=0
@@ -203,6 +233,13 @@ jobs:
           fi
           if [ "${{ needs.pre-commit.result }}" != "success" ]; then
             echo "::error::pre-commit did not succeed (${{ needs.pre-commit.result }})"
+            failed=1
+          fi
+          # Skipped only on release-please's branch, where the lock is stale by
+          # design and a follow-up `uv lock` on main is the fix — see the job.
+          if [ "${{ startsWith(github.head_ref, 'release-please--') }}" != "true" ] &&
+            [ "${{ needs.lockfile.result }}" != "success" ]; then
+            echo "::error::lockfile did not succeed (${{ needs.lockfile.result }}) — run 'uv lock' and commit uv.lock"
             failed=1
           fi
           if [ "${{ needs.test.result }}" != "success" ]; then
