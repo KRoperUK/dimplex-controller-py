@@ -4,7 +4,12 @@ from datetime import datetime, timezone
 
 import pytest
 
-from dimplex_controller.telemetry import VALUE_KEY_T1, VALUE_KEY_T2, parse_telemetry_points
+from dimplex_controller.telemetry import (
+    VALUE_KEY_T1,
+    VALUE_KEY_T2,
+    parse_telemetry_points,
+    reported_energy,
+)
 
 
 def test_empty_and_bad_input():
@@ -278,3 +283,37 @@ def test_summarise_lifetime_all_untimestamped_is_zero():
     assert summary.point_count == 0
     assert summary.start is None
     assert summary.end is None
+
+
+def test_reported_energy_needs_points():
+    """No telemetry is no evidence — the question #113 says the flag cannot answer."""
+    assert reported_energy(None) is False
+    assert reported_energy([]) is False
+    assert reported_energy({}) is False
+
+
+def test_reported_energy_accepts_raw_and_parsed_points():
+    """Raw report entries and already-parsed points both answer it.
+
+    A caller gating entity creation has the appliance's raw entry from
+    ``TsiEnergyReport.ApplianceTelemetryData``; one that also wants the figures has
+    parsed points. Both are evidence of metering, so both are accepted.
+    """
+    raw = [{"timestamp": "2026-06-01T00:00:00Z", "value": 0.25}]
+    assert reported_energy(raw) is True
+    assert reported_energy(parse_telemetry_points(raw)) is True
+
+
+def test_reported_energy_ignores_what_the_parser_skips():
+    """Unrecognised keys, nulls and non-numeric values are not evidence."""
+    assert reported_energy([{"something": "else"}]) is False
+    assert reported_energy([{"value": None}]) is False
+    # Booleans are not numbers here; see test_bool_is_not_a_number.
+    assert reported_energy([{"value": True}]) is False
+
+
+def test_reported_energy_honours_the_register():
+    """T2-only points are evidence for T2, not for the primary register."""
+    t2 = [{"ts": "2026-06-01T00:00:00Z", "t2": 1.5}]
+    assert reported_energy(t2, value_keys=VALUE_KEY_T2) is True
+    assert reported_energy(t2) is False
