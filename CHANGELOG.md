@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.14.0...v0.15.0) (2026-10-18)
+
+
+### Features
+
+* **hot-water:** ASHW cylinder support validated on an EDL200UK-630RF ([#130](https://github.com/KRoperUK/dimplex-controller-py/issues/130)) ([f631e2f](https://github.com/KRoperUK/dimplex-controller-py/commit/f631e2f2599ea8a74f373dfd76aa19875d4459f1))
+* **telemetry:** add reported_energy, the evidence-based counterpart to energy_meter ([#133](https://github.com/KRoperUK/dimplex-controller-py/issues/133)) ([9eb9e6c](https://github.com/KRoperUK/dimplex-controller-py/commit/9eb9e6ccc7d4e855133c5c15578bff9d68ee47d6))
+
+
+### Bug Fixes
+
+* **deps:** relax the pydantic and aiohttp floors to what the code needs ([#131](https://github.com/KRoperUK/dimplex-controller-py/issues/131)) ([0677a59](https://github.com/KRoperUK/dimplex-controller-py/commit/0677a5964d30658bb2797b1f9640e71f0359f4f5))
+
 ## [0.14.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.13.1...v0.14.0) (2026-10-17)
 
 
