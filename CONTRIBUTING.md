@@ -97,6 +97,13 @@ Merging a release-please PR will:
   (uses the `pypi` environment, requires the trusted-publisher OIDC trust to
   be configured in PyPI project settings).
 
+The release bumps the version in `pyproject.toml`, and `uv.lock` records that same
+version — so a release leaves the lock stale. Nothing in the test matrix notices:
+`uv sync --frozen` trusts the lock as written, and `uv run` quietly rewrites it. After a
+release lands on `main`, run `uv lock` and commit the result. CI's `lockfile` job reports
+the drift, and deliberately skips release-please's own PR, because the release is what
+creates the drift and a release should not be blocked on a commit it cannot make itself.
+
 ## Any contributions you make will be under the MIT Software License
 
 In short, when you submit code changes, your submissions are understood to be
