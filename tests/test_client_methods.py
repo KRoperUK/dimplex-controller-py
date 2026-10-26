@@ -11,6 +11,7 @@ import pytest
 
 from dimplex_controller.client import DimplexControl
 from dimplex_controller.const import NO_SETPOINT_SENTINEL, NULL_DATETIME
+from dimplex_controller.exceptions import DimplexApiError
 from dimplex_controller.models import (
     ApplianceModeFlag,
     HeatPumpHwcPeriod,
@@ -494,6 +495,123 @@ async def test_set_hot_water_mode_selects_heat_pump_endpoint(aresponses):
         "/api/RemoteControl/SetApplianceModeHwc",
         "/api/RemoteControl/SetApplianceModeHeatPumpHwc",
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [200, 202, 204])
+async def test_success_is_any_2xx_not_only_200(aresponses, status):
+    """A 2xx write is successful, including 204 No Content.
+
+    Success was gated on exactly 200, so an endpoint that answers 204 with no
+    body raised a ``DimplexApiError`` even though the write had landed
+    (dimplex-controller-py#141). The empty body is already handled by the
+    decoder.
+    """
+    aresponses.add(
+        HOST,
+        "/api/RemoteControl/SetEcoStart",
+        "POST",
+        aresponses.Response(status=status, body=""),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        await _authed(session).set_eco_start("hub-1", ["a-1"], True)
+
+
+@pytest.mark.asyncio
+async def test_redirect_is_not_treated_as_success(aresponses):
+    """3xx stays an error — the 2xx boundary is not "anything not 4xx"."""
+    aresponses.add(
+        HOST,
+        "/api/RemoteControl/SetEcoStart",
+        "POST",
+        aresponses.Response(status=303, body=""),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        with pytest.raises(DimplexApiError):
+            await _authed(session).set_eco_start("hub-1", ["a-1"], True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("duration", [0, -30])
+async def test_set_boost_rejects_a_non_positive_duration(aresponses, duration):
+    """A zero or negative boost length is rejected instead of reported as success."""
+    bodies: list[dict] = []
+
+    async def handler(request):
+        bodies.append(await request.json())
+        return _json(aresponses)
+
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceMode", "POST", handler)
+
+    async with aiohttp.ClientSession() as session:
+        with pytest.raises(ValueError, match="positive"):
+            await _authed(session).set_boost("hub-1", ["a-1"], duration_minutes=duration)
+
+    assert bodies == []
+
+
+@pytest.mark.asyncio
+async def test_clearing_boost_does_not_need_a_duration(aresponses):
+    """clear_boost passes 0 minutes with enable=False, which must stay valid."""
+    captured: dict = {}
+
+    async def handler(request):
+        captured["body"] = await request.json()
+        return _json(aresponses)
+
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceMode", "POST", handler)
+
+    async with aiohttp.ClientSession() as session:
+        await _authed(session).clear_boost("hub-1", ["a-1"])
+
+    assert captured["body"]["Settings"]["Time"] == 0
+    assert captured["body"]["Settings"]["Status"] == 0
+
+
+@pytest.mark.asyncio
+async def test_setpoint_temperature_is_clamped_to_the_mode_range(aresponses, caplog):
+    """A setpoint outside 7–30 °C is clamped and logged, as Away already is."""
+    temperatures: list[int] = []
+
+    async def handler(request):
+        temperatures.append((await request.json())["Temperature"])
+        return _json(aresponses, "true")
+
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceSetpointTemperature", "POST", handler)
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceSetpointTemperature", "POST", handler)
+
+    async with aiohttp.ClientSession() as session:
+        client = _authed(session)
+        with caplog.at_level(logging.WARNING, logger="dimplex_controller.client"):
+            await client.set_appliance_setpoint_temperature("hub-1", ["a-1"], 35.0)
+        await client.set_appliance_setpoint_temperature("hub-1", ["a-1"], 5.0)
+
+    assert temperatures == [30, 7]
+    assert "outside the 7.0–30.0 °C" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_setback_temperature_is_clamped_to_the_mode_range(aresponses, caplog):
+    """The setback write is range-checked the same way as the setpoint write."""
+    temperatures: list[int] = []
+
+    async def handler(request):
+        temperatures.append((await request.json())["Temperature"])
+        return _json(aresponses)
+
+    aresponses.add(HOST, "/api/RemoteControl/SetSetbackTemperature", "POST", handler)
+    aresponses.add(HOST, "/api/RemoteControl/SetSetbackTemperature", "POST", handler)
+
+    async with aiohttp.ClientSession() as session:
+        client = _authed(session)
+        with caplog.at_level(logging.WARNING, logger="dimplex_controller.client"):
+            await client.set_setback_temperature("hub-1", ["a-1"], temperature=2.0)
+        await client.set_setback_temperature("hub-1", ["a-1"], temperature=99.0)
+
+    assert temperatures == [7, 30]
+    assert "outside the 7.0–30.0 °C" in caplog.text
 
 
 # The reply a live ASHW cylinder (EDL200UK-630RF) gave: one period per day.

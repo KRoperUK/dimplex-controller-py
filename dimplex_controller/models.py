@@ -144,6 +144,35 @@ class ProductModel(BaseModel):
             return None
 
 
+_DEFAULT_DATETIME = datetime(1, 1, 1)
+
+
+def _is_null_datetime(value: str) -> bool:
+    """True when ``value`` is the cloud's ``default(DateTime)`` sentinel."""
+    text = value.strip()
+    if not text.startswith(NULL_DATETIME):
+        return False
+    # Tolerate .NET's optional fractional seconds, ``Z`` suffix or offset, e.g.
+    # ``0001-01-01T00:00:00Z`` or ``0001-01-01T00:00:00.0000000+00:00``.
+    return not text[len(NULL_DATETIME) :].strip(".0Z+:")
+
+
+def _map_null_datetime(value: Any) -> Any:
+    """Return ``None`` for the .NET null datetime, leaving real values alone.
+
+    The cloud sends ``0001-01-01T00:00:00`` for an unset date, which Pydantic
+    parsed into ``datetime(1, 1, 1)`` — so an unknown installation date or last
+    telemetry time rendered as year 1 instead of "unknown"
+    (dimplex-controller-py#140). Real timestamps are returned untouched, so
+    Pydantic still parses them (including fractional seconds).
+    """
+    if isinstance(value, datetime):
+        return None if value.replace(tzinfo=None) == _DEFAULT_DATETIME else value
+    if isinstance(value, str) and _is_null_datetime(value):
+        return None
+    return value
+
+
 class Appliance(BaseModel):
     ApplianceId: str
     ApplianceType: str
@@ -160,6 +189,12 @@ class Appliance(BaseModel):
     SeriesIdentifier: str | None = None
     FirmwareVersion: str | None = None
     ProductModelExtensions: dict[str, str] | None = None
+
+    @field_validator("InstallationDate", "LastTelemDate", mode="before")
+    @classmethod
+    def _map_null_dates(cls, value: Any) -> Any:
+        """Map the cloud's unset-date sentinel to ``None`` rather than year 1."""
+        return _map_null_datetime(value)
 
     @field_validator("ProductModelExtensions", mode="before")
     @classmethod
@@ -223,6 +258,12 @@ class Hub(BaseModel):
     PrimaryUserEmail: str | None = None
     IsDefault: bool | None = None
     RoleName: str | None = None
+
+    @field_validator("HubRegistrationDate", "InstallationDate", "LastTelemDate", mode="before")
+    @classmethod
+    def _map_null_dates(cls, value: Any) -> Any:
+        """Map the cloud's unset-date sentinel to ``None`` rather than year 1."""
+        return _map_null_datetime(value)
 
 
 class TimerPeriod(BaseModel):
