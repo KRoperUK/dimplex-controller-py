@@ -38,6 +38,20 @@
   color: "ffffff"
   description: This will not be worked on
 
+# --- Triage (applied by the triage skill; roles documented in docs/agents/triage-labels.md) ---
+- name: needs-triage
+  color: "fbca04"
+  description: Maintainer needs to evaluate this issue
+- name: needs-info
+  color: "d876e3"
+  description: Waiting on reporter for more information
+- name: ready-for-agent
+  color: "0e8a16"
+  description: Fully specified, ready for an AFK agent
+- name: ready-for-human
+  color: "1d76db"
+  description: Requires human implementation
+
 # --- Dependency labels (referenced by .github/dependabot.yml) ---
 - name: dependencies
   color: "0366d6"
