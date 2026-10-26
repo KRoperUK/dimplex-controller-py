@@ -101,6 +101,10 @@ class AuthManager:
         self._access_token: str | None = bundle.access_token
         self._refresh_token: str | None = bundle.refresh_token
         self._expires_at: float = bundle.expires_at
+        # Serialises refreshes so concurrent callers share one POST (see
+        # get_access_token). Created eagerly: asyncio locks bind to the running
+        # loop on first use, not on construction.
+        self._refresh_lock = asyncio.Lock()
 
     def _request_kwargs(self) -> dict[str, Any]:
         """Common per-request kwargs (applies the configured timeout)."""
@@ -130,7 +134,17 @@ class AuthManager:
         self._expires_at = bundle.expires_at
 
     async def get_access_token(self) -> str:
-        """Get a valid access token, refreshing if necessary."""
+        """Get a valid access token, refreshing if necessary.
+
+        Refresh is single-flight. Callers that see an expired token queue on
+        :attr:`_refresh_lock` and re-check expiry once they hold it, so only the
+        first performs the ``POST /token`` and the rest reuse its result. The
+        cloud rotates the refresh token on every refresh, so two concurrent
+        refreshes sent the same token meant all but one were answered
+        ``invalid_grant`` — a permanent auth failure produced by ordinary
+        concurrency (dimplex-controller-py#139). A failed refresh raises through
+        ``async with``, leaving the lock free for the next caller.
+        """
         if not self._refresh_token:
             raise DimplexAuthInvalidGrantError(
                 "No refresh token available. User must authenticate first.",
@@ -141,8 +155,11 @@ class AuthManager:
             assert self._access_token is not None
             return self._access_token
 
-        # Token expired or missing, try refresh
-        await self.refresh_tokens()
+        async with self._refresh_lock:
+            # Another caller may have refreshed while we waited for the lock.
+            if not self.is_authenticated:
+                await self.refresh_tokens()
+
         if not self._access_token:
             raise DimplexAuthInvalidGrantError(
                 "Token refresh succeeded but no access token was returned.",

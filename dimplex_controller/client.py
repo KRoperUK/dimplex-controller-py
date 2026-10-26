@@ -26,7 +26,8 @@ from .const import (
     HEADER_DEVICE_OS,
     HEADER_DEVICE_VERSION,
     HEADER_USER_AGENT,
-    HTTP_OK,
+    MODE_TEMP_MAX,
+    MODE_TEMP_MIN,
     NO_SETPOINT_SENTINEL,
     NULL_DATETIME,
 )
@@ -89,6 +90,28 @@ def _clamp_away_temperature(temperature: float) -> float:
             value,
             AWAY_TEMP_MIN,
             AWAY_TEMP_MAX,
+            clamped,
+        )
+    return clamped
+
+
+def _clamp_mode_temperature(temperature: float) -> float:
+    """Clamp a setpoint into the 7–30 °C the app's mode carousels offer.
+
+    The wire field is a byte, so an out-of-range value used to be sent verbatim
+    and only reduced (or ignored) by the cloud — the write reported success for
+    a setpoint the appliance never reached. Clamping, as Away already does,
+    keeps the requested value and the applied value in agreement and makes the
+    adjustment visible (dimplex-controller-py#141).
+    """
+    value = float(temperature)
+    clamped = min(max(value, MODE_TEMP_MIN), MODE_TEMP_MAX)
+    if clamped != value:
+        _LOGGER.warning(
+            "Setpoint %.1f °C is outside the %s–%s °C the app offers; using %.1f °C",
+            value,
+            MODE_TEMP_MIN,
+            MODE_TEMP_MAX,
             clamped,
         )
     return clamped
@@ -260,7 +283,11 @@ class DimplexControl:
         for attempt in range(attempts):
             try:
                 async with self._session.request(method, url, headers=headers, **kwargs) as resp:
-                    if resp.status == HTTP_OK:
+                    # Any 2xx is success. Control endpoints may answer 204 No
+                    # Content, and an empty body is already what
+                    # _decode_ok_body handles; gating on exactly 200 raised a
+                    # successful write as an API error (dimplex-controller-py#141).
+                    if 200 <= resp.status < 300:
                         return await self._decode_ok_body(resp)
 
                     text = await resp.text()
@@ -584,18 +611,27 @@ class DimplexControl:
         with ``Status=1`` (on) / ``Status=0`` (off); ``Time`` carries the boost
         duration in minutes and ``Temperature`` the boost target (7–30 °C).
 
+        A non-positive ``duration_minutes`` raises :class:`ValueError` when
+        engaging: the cloud accepted ``Time=0`` and the appliance simply did not
+        boost, so the caller was told a boost had started that never would
+        (dimplex-controller-py#141). Clearing (``enable=False``) is unaffected —
+        it sends ``Time=0`` by design.
+
         .. versionchanged:: 0.13.0
            Previously sent ``ApplianceModes=16``, which is **Advance** — the
            appliance advanced its schedule instead of boosting, and the
            requested duration was discarded.
         """
+        minutes = int(duration_minutes)
+        if enable and minutes <= 0:
+            raise ValueError(f"boost duration must be a positive number of minutes, got {duration_minutes!r}")
         await self.set_mode_flag(
             hub_id,
             appliance_ids,
             ApplianceModeFlag.BOOST,
             enable=enable,
             temperature=temperature,
-            minutes=int(duration_minutes) if enable else 0,
+            minutes=minutes if enable else 0,
         )
 
     async def clear_boost(
@@ -763,12 +799,16 @@ class DimplexControl:
         the schedule and is rejected with HTTP 403 on Quantum.
 
         ``Temperature`` is a wire ``byte``, so the value is rounded to whole
-        degrees.
+        degrees, and it is clamped into the 7–30 °C range the app offers
+        (:data:`~dimplex_controller.MODE_TEMP_MIN` /
+        :data:`~dimplex_controller.MODE_TEMP_MAX`) with a warning when it is
+        outside — the cloud silently reduces such a value
+        (dimplex-controller-py#141).
         """
         payload = {
             "HubId": hub_id,
             "ApplianceIds": appliance_ids,
-            "Temperature": int(round(temperature)),
+            "Temperature": int(round(_clamp_mode_temperature(temperature))),
         }
         await self._request("POST", "/RemoteControl/SetApplianceSetpointTemperature", json=payload)
 
@@ -785,7 +825,8 @@ class DimplexControl:
         ``status`` is an :class:`~dimplex_controller.SetbackStatus` byte —
         ``ACTIVE``/``INACTIVE`` for a plain setback, with ``DSM_MODE`` and
         ``LOCAL_FREQUENCY_CONTROL_ACTIVE`` reserved for demand-side-management
-        use.
+        use. ``temperature`` is rounded and clamped into 7–30 °C, as
+        :meth:`set_appliance_setpoint_temperature` does.
 
         Confirmed present in APK 2.26.0 but **not yet validated on live
         hardware**.
@@ -794,7 +835,7 @@ class DimplexControl:
             "HubId": hub_id,
             "ApplianceIds": appliance_ids,
             "Status": int(status),
-            "Temperature": int(round(temperature)),
+            "Temperature": int(round(_clamp_mode_temperature(temperature))),
         }
         await self._request("POST", "/RemoteControl/SetSetbackTemperature", json=payload)
 
