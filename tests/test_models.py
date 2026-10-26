@@ -1,6 +1,10 @@
 """Tests for data models."""
 
-from dimplex_controller.const import NO_SETPOINT_SENTINEL
+from datetime import datetime, timezone
+
+import pytest
+
+from dimplex_controller.const import NO_SETPOINT_SENTINEL, NULL_DATETIME
 from dimplex_controller.models import (
     Appliance,
     ApplianceModeFlag,
@@ -400,6 +404,78 @@ def test_hub_with_connection_state():
     assert hub.NumberOfAppliances == 3
     assert hub.IsServiceModeEnabled is False
     assert hub.LastTelemDate is not None
+
+
+@pytest.mark.parametrize(
+    "sentinel",
+    [NULL_DATETIME, "0001-01-01T00:00:00Z", "0001-01-01T00:00:00.0000000+00:00"],
+)
+def test_null_datetime_sentinel_parses_to_none(sentinel):
+    """The cloud's default(DateTime) means "unset", not year 1.
+
+    ``0001-01-01T00:00:00`` parsed happily into ``datetime(1, 1, 1)``, so an
+    unset date rendered as year 1 instead of "unknown"
+    (dimplex-controller-py#140).
+    """
+    appliance = Appliance.model_validate(
+        {
+            "ApplianceId": "a1",
+            "ApplianceType": "Quantum",
+            "ZoneId": "z1",
+            "FriendlyName": "Room",
+            "ZoneName": "Room",
+            "InstallationDate": sentinel,
+            "LastTelemDate": sentinel,
+        }
+    )
+    assert appliance.InstallationDate is None
+    assert appliance.LastTelemDate is None
+
+    hub = Hub.model_validate(
+        {
+            "HubId": "h1",
+            "HubName": "Home",
+            "HubRegistrationDate": sentinel,
+            "InstallationDate": sentinel,
+            "LastTelemDate": sentinel,
+        }
+    )
+    assert hub.HubRegistrationDate is None
+    assert hub.InstallationDate is None
+    assert hub.LastTelemDate is None
+
+
+def test_null_datetime_sentinel_from_an_already_parsed_datetime():
+    """A hand-built model gets the same mapping as one parsed from the wire."""
+    appliance = Appliance(
+        ApplianceId="a1",
+        ApplianceType="Quantum",
+        ZoneId="z1",
+        FriendlyName="Room",
+        ZoneName="Room",
+        InstallationDate=datetime(1, 1, 1),
+    )
+    assert appliance.InstallationDate is None
+
+
+def test_real_datetimes_still_parse_including_fractional_seconds():
+    """A real timestamp is untouched by the sentinel mapping."""
+    appliance = Appliance.model_validate(
+        {
+            "ApplianceId": "a1",
+            "ApplianceType": "Quantum",
+            "ZoneId": "z1",
+            "FriendlyName": "Room",
+            "ZoneName": "Room",
+            "InstallationDate": "2025-11-02T08:15:00",
+            "LastTelemDate": "2026-06-12T09:45:34.89Z",
+        }
+    )
+    assert appliance.InstallationDate == datetime(2025, 11, 2, 8, 15)
+    assert appliance.LastTelemDate == datetime(2026, 6, 12, 9, 45, 34, 890000, tzinfo=timezone.utc)
+
+    hub = Hub.model_validate({"HubId": "h1", "HubRegistrationDate": "2024-03-01T00:00:00.123456"})
+    assert hub.HubRegistrationDate == datetime(2024, 3, 1, 0, 0, 0, 123456)
 
 
 def test_timer_period_malformed_time_returns_none():

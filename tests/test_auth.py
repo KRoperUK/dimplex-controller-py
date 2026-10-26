@@ -206,6 +206,77 @@ async def test_get_access_token_refresh_returns_no_access(aresponses):
         assert exc_info.value.code == "missing_access_token"
 
 
+@pytest.mark.asyncio
+async def test_concurrent_get_access_token_posts_one_refresh(aresponses):
+    """N callers on an expired token share one refresh POST.
+
+    Every caller used to pass the expiry check and then refresh with the same
+    refresh token. The cloud rotates that token, so all but one got
+    ``invalid_grant`` — an auth failure produced by ordinary concurrency
+    (dimplex-controller-py#139).
+
+    The POST is held open until all callers are in flight, so the callers really
+    do overlap: without single-flight every one of them reaches the endpoint.
+    """
+    concurrency = 5
+    posts: list[str] = []
+    in_flight = asyncio.Event()
+    release = asyncio.Event()
+
+    async def handler(request):
+        posts.append(request.path)
+        in_flight.set()
+        await release.wait()
+        return aresponses.Response(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            body='{"access_token": "fresh_access", "refresh_token": "rotated", "expires_in": 3600}',
+        )
+
+    # One route per caller, so the count below measures refreshes rather than
+    # how many requests the mock happened to accept.
+    aresponses.add(B2C_HOST, TOKEN_PATH, "POST", handler, repeat=concurrency)
+
+    updates: list[TokenBundle] = []
+    async with aiohttp.ClientSession() as session:
+        auth = AuthManager(
+            session,
+            {"access_token": "stale_access", "refresh_token": "old_refresh", "expires_at": 1},
+            on_token_update=updates.append,
+        )
+        callers = [asyncio.create_task(auth.get_access_token()) for _ in range(concurrency)]
+        await asyncio.wait_for(in_flight.wait(), timeout=5)
+        release.set()
+        tokens = await asyncio.wait_for(asyncio.gather(*callers), timeout=5)
+
+    assert tokens == ["fresh_access"] * concurrency
+    assert len(posts) == 1
+    assert len(updates) == 1
+
+
+@pytest.mark.asyncio
+async def test_failed_refresh_releases_the_lock(aresponses):
+    """A refresh that raises must not leave the lock held.
+
+    Otherwise the next caller blocks forever instead of retrying — or, since
+    the failure here is ``invalid_grant``, re-authenticating.
+    """
+    _token_response(aresponses, status=400, body='{"error": "invalid_grant"}')
+    _token_response(aresponses)
+
+    async with aiohttp.ClientSession() as session:
+        auth = AuthManager(
+            session,
+            {"access_token": "stale_access", "refresh_token": "old_refresh", "expires_at": 1},
+        )
+        with pytest.raises(DimplexAuthInvalidGrantError):
+            await asyncio.wait_for(auth.get_access_token(), timeout=5)
+
+        assert auth._refresh_lock.locked() is False
+        # The lock is free again, so the next caller can refresh.
+        assert await asyncio.wait_for(auth.get_access_token(), timeout=5) == "new_access"
+
+
 # ---------------------------------------------------------------------------
 # is_authenticated / TokenBundle / listeners / persistence
 # ---------------------------------------------------------------------------
