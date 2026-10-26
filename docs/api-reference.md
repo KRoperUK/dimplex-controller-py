@@ -74,8 +74,8 @@ payload shapes.
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `set_appliance_setpoint_temperature(hub_id, appliance_ids, temperature)` | `None` | **Preferred setpoint path.** Dedicated endpoint; applies immediately and leaves the schedule untouched. |
-| `set_boost(hub_id, appliance_ids, *, temperature=21.0, duration_minutes=60, enable=True)` | `None` | Timed Boost (`ApplianceModes=2`, `Time` = minutes). |
+| `set_appliance_setpoint_temperature(hub_id, appliance_ids, temperature)` | `None` | **Preferred setpoint path.** Dedicated endpoint; applies immediately and leaves the schedule untouched. Rounded to whole degrees and clamped into 7–30 °C, with a warning, when outside. |
+| `set_boost(hub_id, appliance_ids, *, temperature=21.0, duration_minutes=60, enable=True)` | `None` | Timed Boost (`ApplianceModes=2`, `Time` = minutes). A non-positive `duration_minutes` raises `ValueError` when enabling. |
 | `clear_boost(hub_id, appliance_ids, *, temperature=21.0)` | `None` | Disable Boost (convenience wrapper). |
 | `set_away(hub_id, appliance_ids, *, temperature=7.0, enable=True, until=None, number_of_days=0)` | `None` | Away setback (`ApplianceModes=4`). `until` is the away-until datetime sent in `Date`; **7–18 °C**, defaults to the 7 °C anti-freeze floor. When enabling, the temperature is clamped into that range and a warning logged if it had to be (dimplex-controller-py#98). |
 | `clear_away(hub_id, appliance_ids, *, temperature=7.0)` | `None` | Disable Away (convenience wrapper). |
@@ -84,7 +84,7 @@ payload shapes.
 | `set_advance(hub_id, appliance_ids, *, enable=True, temperature=None)` | `None` | Advance to the next schedule period (`ApplianceModes=16`); sends the `255` sentinel when no temperature is given. |
 | `set_manual(hub_id, appliance_ids, *, temperature, enable=True)` | `None` | Hold a manual setpoint (`ApplianceModes=128`). |
 | `set_eco_mode(hub_id, appliance_ids, *, temperature, enable=True)` | `None` | Engage Eco mode (`ApplianceModes=64`). Not the same as `set_eco_start`. |
-| `set_setback_temperature(hub_id, appliance_ids, *, temperature, status=SetbackStatus.ACTIVE)` | `None` | Write the setback temperature. **Untested.** |
+| `set_setback_temperature(hub_id, appliance_ids, *, temperature, status=SetbackStatus.ACTIVE)` | `None` | Write the setback temperature, clamped into 7–30 °C as the setpoint write is. **Untested.** |
 | `set_eco_start(hub_id, appliance_ids, enable)` | `None` | Toggle the EcoStart pre-heat setting. |
 | `set_open_window_detection(hub_id, appliance_ids, enable)` | `None` | Toggle Open Window Detection. |
 | `set_period_setpoint(hub_id, appliance_id, *, day_of_week, start_time, temperature, end_time=None)` | `TimerModeSettings` | Update one timer period's setpoint without clobbering others. |
@@ -193,7 +193,7 @@ Frozen dataclass for serialising auth tokens.
 | `EcoStartEnabled` | `bool \| None` | Whether EcoStart is on. |
 | `OpenWindowEnabled` | `bool \| None` | Open Window Detection on. |
 | `ApplianceModes` | `int \| None` | Mode bitmask. |
-| `BoostDuration` | `int \| None` | Boost remaining minutes. |
+| `BoostDuration` | `int \| None` | Boost length in **minutes** — a configured duration, not a countdown (there is no remaining-time field). Use `is_boost_active` for whether boost is running. |
 | `BoostTemperature` | `float \| None` | Boost target. |
 | `AwayDateTime` | `str \| None` | Away start (non-empty = active). |
 | `AwayTemperature` | `float \| None` | Away target. |
