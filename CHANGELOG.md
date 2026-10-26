@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.1](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.15.0...v0.15.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* accept any 2xx and validate write inputs ([2b4a55e](https://github.com/KRoperUK/dimplex-controller-py/commit/2b4a55e8eef92ec5612f5ec5ae55858b483d5a26)), closes [#141](https://github.com/KRoperUK/dimplex-controller-py/issues/141)
+* map .NET null datetimes to None ([f61fbf6](https://github.com/KRoperUK/dimplex-controller-py/commit/f61fbf6087db730dc0bea2975772122f8525f651)), closes [#140](https://github.com/KRoperUK/dimplex-controller-py/issues/140)
+* single-flight auth, null datetimes, and validated writes ([#142](https://github.com/KRoperUK/dimplex-controller-py/issues/142)) ([790c395](https://github.com/KRoperUK/dimplex-controller-py/commit/790c3952644344d6a4e01196fabfed7e634c11d0))
+* single-flight token refresh in AuthManager ([ede146e](https://github.com/KRoperUK/dimplex-controller-py/commit/ede146e34d514ec755426d4b789de09379e2e68a)), closes [#139](https://github.com/KRoperUK/dimplex-controller-py/issues/139)
+
 ## [0.15.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.14.0...v0.15.0) (2026-10-18)
 
 
