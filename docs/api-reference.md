@@ -325,6 +325,11 @@ from dimplex_controller import (
 `ApplianceCapabilities` mirrors these as `min_temp`/`max_temp` and, for the Away
 mode specifically, `away_min_temp`/`away_max_temp`.
 
+Unset dates arrive as .NET's `default(DateTime)` (`0001-01-01T00:00:00`).
+`Appliance.InstallationDate` / `LastTelemDate` and `Hub.HubRegistrationDate` /
+`InstallationDate` / `LastTelemDate` are `datetime | None`, with that sentinel
+mapped to `None` so an unknown date is not passed on as year 1.
+
 ### `UserContext`
 
 | Field | Type |
