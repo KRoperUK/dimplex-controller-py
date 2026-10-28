@@ -1,0 +1,53 @@
+name: re-lock release PR
+
+# `uv.lock` records the root project's version, so every release-please PR
+# (which bumps `pyproject.toml`) carries a stale lock — and `main` went red
+# after the 0.14.0, 0.15.0, 0.15.1 and 0.16.0 releases because of it (#153).
+# This job re-locks the release PR in place so the merged release is already
+# consistent.
+#
+# Mechanics worth knowing:
+# - Only the release-please branch is touched, and only `uv.lock` is committed.
+# - Token pushes to a PR branch re-fire `pull_request` runs (release PR #151
+#   carried full CI from release-please's own token push), so the fix gets a
+#   fresh CI run; the job is idempotent, so that run is a no-op.
+# - The `lockfile` job still skips release-please's branch: its result would
+#   predate this job's push on the first run, and the in-job `uv lock --check`
+#   already verifies the fix before pushing. If this job fails, it fails
+#   visibly on the release PR instead of silently reddening `main` later.
+# - `concurrency` serialises against release-please's own force-pushes; a lost
+#   race fails this run and the next `synchronize` event retries.
+
+on:
+    pull_request:
+        types: [opened, synchronize, reopened]
+        branches: [main]
+
+jobs:
+    relock:
+        if: github.head_ref == 'release-please--branches--main'
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        concurrency:
+            group: relock-release-pr
+            cancel-in-progress: true
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ github.head_ref }}
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
+            - name: Re-lock the release PR when stale
+              run: |
+                  uv lock --check 2>/dev/null && exit 0
+                  uv lock
+                  uv lock --check
+                  git diff --quiet -- uv.lock && exit 0
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                  git add uv.lock
+                  git commit -m "chore: re-lock uv.lock for the release"
+                  git push origin "HEAD:${{ github.head_ref }}"
