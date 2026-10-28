@@ -44,6 +44,7 @@ from .models import (
     ApplianceModeSettings,
     ApplianceModeStatus,
     ApplianceStatus,
+    ApplyProfileToTimerResult,
     AutomaticProvisioning,
     HeatPumpHwcPeriod,
     HeatPumpHwcSchedule,
@@ -56,6 +57,8 @@ from .models import (
     TimerModeSettings,
     TimerPeriod,
     TsiEnergyReport,
+    UserHeatingProfile,
+    UserHeatingProfilePeriod,
     Zone,
 )
 from .telemetry import (
@@ -92,6 +95,9 @@ __all__ = [
     "AutomaticProvisioning",
     "ProductModel",
     "TsiEnergyReport",
+    "ApplyProfileToTimerResult",
+    "UserHeatingProfile",
+    "UserHeatingProfilePeriod",
     "DEFAULT_AWAY_TEMPERATURE",
     "DEFAULT_BOOST_TEMPERATURE",
     "AWAY_TEMP_MIN",

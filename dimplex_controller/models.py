@@ -87,6 +87,20 @@ class ScheduleProfile(IntEnum):
     OUT_ALL_DAY = 2
 
 
+class ApplyProfileToTimerResult(IntEnum):
+    """Outcome of applying a profile to a timer.
+
+    Values are the ``DimplexControl.Common.Constants.ApplyProfileToTimerResult``
+    enum from the official Dimplex Control Android app (2.29.1), returned as a
+    raw int by ``POST /UserHeatingProfile/ApplyProfileToTimer``
+    (dimplex-controller-py#148).
+    """
+
+    SUCCESSFUL = 0
+    PROFILE_DOES_NOT_EXIST = 1
+    ERROR = 2
+
+
 class HygieneFrequency(IntEnum):
     """``EFrequency`` — hot-water hygiene (anti-legionella) cycle frequency."""
 
@@ -301,6 +315,53 @@ class TimerModeSettings(BaseModel):
     ApplianceId: str
     TimerMode: int
     TimerPeriods: list[TimerPeriod] = Field(default_factory=list)
+
+
+class UserHeatingProfilePeriod(BaseModel):
+    """One period of a user heating profile (``UserHeatingProfilePeriod``).
+
+    ``DayOfWeek`` is .NET's (0 = Sunday). ``StartTime``/``EndTime`` are the
+    ``"HH:MM:SS"`` TimeSpan strings, kept as ``str`` like
+    :class:`TimerPeriod`. ``Temperature`` is whole °C — the app formats it as
+    ``"{Temperature}°"``. Responses also carry ``Formatted*`` display strings
+    and a ``UserHeatingProfile`` back-reference, which are ignored on parse.
+    """
+
+    UserHeatingProfileId: str
+    DayOfWeek: int
+    StartTime: str
+    EndTime: str
+    Temperature: int
+
+    @property
+    def start_time_obj(self) -> time | None:
+        """Parse StartTime as a time object (None if malformed)."""
+        try:
+            return datetime.strptime(self.StartTime, "%H:%M:%S").time()
+        except (ValueError, TypeError):
+            return None
+
+    @property
+    def end_time_obj(self) -> time | None:
+        """Parse EndTime as a time object (None if malformed)."""
+        try:
+            return datetime.strptime(self.EndTime, "%H:%M:%S").time()
+        except (ValueError, TypeError):
+            return None
+
+
+class UserHeatingProfile(BaseModel):
+    """A named multi-day schedule (``UserHeatingProfile``).
+
+    Listed by ``GET /UserHeatingProfile/GetProfiles`` and sent back inside
+    ``AddEditProfileRequest`` to ``POST
+    /UserHeatingProfile/AddOrUpdateProfilePeriodsWithAddEditProfileRequest``
+    (dimplex-controller-py#148).
+    """
+
+    Id: str
+    ProfileName: str
+    UserHeatingProfilePeriods: list[UserHeatingProfilePeriod] = Field(default_factory=list)
 
 
 class HeatPumpHwcPeriod(BaseModel):

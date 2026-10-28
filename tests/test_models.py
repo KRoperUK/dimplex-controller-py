@@ -10,12 +10,15 @@ from dimplex_controller.models import (
     ApplianceModeFlag,
     ApplianceModeSettings,
     ApplianceStatus,
+    ApplyProfileToTimerResult,
     Hub,
     HygieneFrequency,
     SetbackStatus,
     TimerModeSettings,
     TimerPeriod,
     UserContext,
+    UserHeatingProfile,
+    UserHeatingProfilePeriod,
     Zone,
 )
 
@@ -488,6 +491,54 @@ def test_timer_period_malformed_time_returns_none():
 def test_timer_period_empty_time_returns_none():
     """Empty time strings return None."""
     period = TimerPeriod(DayOfWeek=0, StartTime="", EndTime="", Temperature=18.0)
+    assert period.start_time_obj is None
+    assert period.end_time_obj is None
+
+
+def test_apply_profile_to_timer_result_values_match_the_app():
+    """ApplyProfileToTimerResult values from Dimplex Control APK 2.29.1."""
+    assert int(ApplyProfileToTimerResult.SUCCESSFUL) == 0
+    assert int(ApplyProfileToTimerResult.PROFILE_DOES_NOT_EXIST) == 1
+    assert int(ApplyProfileToTimerResult.ERROR) == 2
+
+
+def test_user_heating_profile_round_trip_and_time_helpers():
+    """Profile periods parse HH:MM:SS helpers like TimerPeriod does."""
+    profile = UserHeatingProfile.model_validate(
+        {
+            "Id": "p-1",
+            "ProfileName": "Winter",
+            "UserHeatingProfilePeriods": [
+                {
+                    "UserHeatingProfileId": "p-1",
+                    "DayOfWeek": 0,
+                    "StartTime": "06:30:00",
+                    "EndTime": "09:00:00",
+                    "Temperature": 19,
+                }
+            ],
+        }
+    )
+    (period,) = profile.UserHeatingProfilePeriods
+    assert isinstance(period, UserHeatingProfilePeriod)
+    assert period.Temperature == 19
+    assert period.start_time_obj is not None and (period.start_time_obj.hour, period.start_time_obj.minute) == (6, 30)
+    assert period.end_time_obj is not None and (period.end_time_obj.hour, period.end_time_obj.minute) == (9, 0)
+
+    dumped = profile.model_dump(mode="json")
+    assert dumped["UserHeatingProfilePeriods"][0]["StartTime"] == "06:30:00"
+    assert "FormattedStartTime" not in dumped["UserHeatingProfilePeriods"][0]
+
+
+def test_user_heating_profile_period_malformed_time_returns_none():
+    """Malformed profile period times return None instead of raising."""
+    period = UserHeatingProfilePeriod(
+        UserHeatingProfileId="p-1",
+        DayOfWeek=0,
+        StartTime="invalid",
+        EndTime="",
+        Temperature=19,
+    )
     assert period.start_time_obj is None
     assert period.end_time_obj is None
 
