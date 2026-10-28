@@ -38,6 +38,7 @@ from .models import (
     ApplianceModeSettings,
     ApplianceModeStatus,
     ApplianceStatus,
+    ApplyProfileToTimerResult,
     HeatPumpHwcSchedule,
     Hub,
     HygieneFrequency,
@@ -49,6 +50,7 @@ from .models import (
     TimerPeriod,
     TsiEnergyReport,
     UserContext,
+    UserHeatingProfile,
     Zone,
 )
 
@@ -1067,6 +1069,70 @@ class DimplexControl:
             "TimerMode": int(timer_mode),
         }
         await self._request("POST", "/RemoteControl/CopyScheduleToAppliances", json=payload)
+
+    async def get_profiles(self) -> list[UserHeatingProfile]:
+        """List the user's saved heating profiles (``GetProfiles``)."""
+        data = await self._request("GET", "/UserHeatingProfile/GetProfiles")
+        if not data:
+            return []
+        return [UserHeatingProfile.model_validate(item) for item in data]
+
+    async def apply_profile_to_timer(
+        self,
+        hub_id: str,
+        appliance_ids: list[str],
+        profile: int | ScheduleProfile,
+        profile_id: str,
+    ) -> ApplyProfileToTimerResult:
+        """Apply a saved profile to appliances' timers (``ApplyProfileToTimer``).
+
+        ``profile`` is the 0/1/2 profile selector (a :class:`ScheduleProfile`
+        or its int value), sent in the request's ``TimerMode`` field — the name
+        collides with ``TimerModeSettings.TimerMode`` but the value domain is
+        the profile selector, not an operation mode. ``profile_id`` is the
+        selected :class:`UserHeatingProfile` id (dimplex-controller-py#148).
+        """
+        payload = {
+            "HubId": hub_id,
+            "ListOfApplianceIds": appliance_ids,
+            "TimerMode": int(profile),
+            "ProfileId": profile_id,
+        }
+        data = await self._request("POST", "/UserHeatingProfile/ApplyProfileToTimer", json=payload)
+        return ApplyProfileToTimerResult(int(data))
+
+    async def add_or_update_profile_periods(self, profile: UserHeatingProfile, *, retry_count: int = 0) -> str:
+        """Save a profile's periods (``AddOrUpdateProfilePeriods...``); return its id.
+
+        ``retry_count`` is the client-side attempt counter the app sends in
+        ``AddEditProfileRequest``; it starts at 0. Only the profile's
+        ``Id``/``ProfileName``/periods are sent — the ``Formatted*`` display
+        strings the app includes are server-ignored (dimplex-controller-py#148).
+        """
+        payload = {
+            "UserHeatingProfile": profile.model_dump(mode="json"),
+            "RetryCount": retry_count,
+        }
+        data = await self._request(
+            "POST",
+            "/UserHeatingProfile/AddOrUpdateProfilePeriodsWithAddEditProfileRequest",
+            json=payload,
+        )
+        return str(data)
+
+    async def rename_profile(self, profile_id: str, profile_name: str) -> bool:
+        """Rename a saved profile (``RenameProfile``)."""
+        payload = {"ProfileId": profile_id, "ProfileName": profile_name}
+        data = await self._request("POST", "/UserHeatingProfile/RenameProfile", json=payload)
+        return bool(data)
+
+    async def delete_profile(self, profile_id: str) -> None:
+        """Delete a saved profile (``DeleteProfile``).
+
+        The app posts the id as a bare JSON string body (``"<guid>"``) and
+        reads no response, so neither do we (dimplex-controller-py#148).
+        """
+        await self._request("POST", "/UserHeatingProfile/DeleteProfile", json=profile_id)
 
     async def get_tsi_energy_report(
         self,
