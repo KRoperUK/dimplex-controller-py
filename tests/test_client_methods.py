@@ -17,6 +17,7 @@ from dimplex_controller.models import (
     HeatPumpHwcPeriod,
     HeatPumpHwcSchedule,
     HygieneFrequency,
+    ScheduleProfile,
     SetbackStatus,
     TimerMode,
     TimerModeSettings,
@@ -472,6 +473,39 @@ async def test_manual_and_eco_mode_helpers(aresponses):
     assert bodies[0]["Settings"]["ApplianceModes"] == int(ApplianceModeFlag.MANUAL) == 128
     assert bodies[0]["Settings"]["Temperature"] == 20
     assert bodies[1]["Settings"]["ApplianceModes"] == int(ApplianceModeFlag.ECO) == 64
+
+
+@pytest.mark.asyncio
+async def test_set_schedule_profile_sends_status_two(aresponses):
+    """Applying a schedule profile sends the TIMER bit with StatusTwo set.
+
+    The app's schedule picker writes ``ApplianceModes=1, Status=1`` with the
+    profile (0/1/2) in ``StatusTwo``; ``set_mode_flag`` used to have no way to
+    express that and always sent 0 (dimplex-controller-py#147).
+    """
+    bodies: list[dict] = []
+
+    async def handler(request):
+        bodies.append(await request.json())
+        return _json(aresponses)
+
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceMode", "POST", handler)
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceMode", "POST", handler)
+    aresponses.add(HOST, "/api/RemoteControl/SetApplianceMode", "POST", handler)
+
+    async with aiohttp.ClientSession() as session:
+        client = _authed(session)
+        await client.set_schedule_profile("hub-1", ["a-1"], ScheduleProfile.OUT_ALL_DAY)
+        await client.set_schedule_profile("hub-1", ["a-1"], 1)
+        await client.set_mode_flag(
+            "hub-1", ["a-1"], ApplianceModeFlag.TIMER_MODE, status_two=ScheduleProfile.HOME_ALL_DAY
+        )
+
+    assert bodies[0]["Settings"]["ApplianceModes"] == int(ApplianceModeFlag.TIMER_MODE) == 1
+    assert bodies[0]["Settings"]["Status"] == 1
+    assert bodies[0]["Settings"]["StatusTwo"] == 2
+    assert bodies[1]["Settings"]["StatusTwo"] == 1
+    assert bodies[2]["Settings"]["StatusTwo"] == 1
 
 
 @pytest.mark.asyncio

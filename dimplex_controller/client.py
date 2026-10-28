@@ -42,6 +42,7 @@ from .models import (
     Hub,
     HygieneFrequency,
     ProductModel,
+    ScheduleProfile,
     SetbackStatus,
     TimerMode,
     TimerModeSettings,
@@ -572,6 +573,7 @@ class DimplexControl:
         until: datetime | str | None = None,
         number_of_days: int = 0,
         frequency: int | HygieneFrequency = 0,
+        status_two: int | ScheduleProfile = 0,
         endpoint: str = "/RemoteControl/SetApplianceMode",
     ) -> None:
         """Engage or clear a single :class:`ApplianceModeFlag`.
@@ -588,6 +590,7 @@ class DimplexControl:
             Date=_iso_away_until(until) if enable else NULL_DATETIME,
             NumberOfDays=int(number_of_days) if enable else 0,
             Frequency=int(frequency) if enable else 0,
+            StatusTwo=int(status_two) if enable else 0,
         )
         payload = {
             "Settings": settings.model_dump(mode="json"),
@@ -786,6 +789,26 @@ class DimplexControl:
             ApplianceModeFlag.ECO,
             enable=enable,
             temperature=temperature,
+        )
+
+    async def set_schedule_profile(
+        self,
+        hub_id: str,
+        appliance_ids: list[str],
+        profile: int | ScheduleProfile,
+    ) -> None:
+        """Apply a schedule profile (User timer / Home all day / Out all day).
+
+        Sends ``ApplianceModes=1`` (:attr:`TIMER_MODE`) with ``Status=1`` and
+        the profile in ``StatusTwo`` — the exact payload the official app's
+        schedule picker sends (dimplex-controller-py#147). Accepts a
+        :class:`ScheduleProfile` or its int value.
+        """
+        await self.set_mode_flag(
+            hub_id,
+            appliance_ids,
+            ApplianceModeFlag.TIMER_MODE,
+            status_two=int(profile),
         )
 
     async def set_appliance_setpoint_temperature(
