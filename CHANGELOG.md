@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.16.1](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.16.0...v0.16.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **ci:** auto re-lock the release PR so releases stop reddening main ([#154](https://github.com/KRoperUK/dimplex-controller-py/issues/154)) ([dee55c9](https://github.com/KRoperUK/dimplex-controller-py/commit/dee55c9d7e458dafb0121aa08d5f6b8f3b72b758)), closes [#153](https://github.com/KRoperUK/dimplex-controller-py/issues/153)
+
 ## [0.16.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.15.1...v0.16.0) (2026-10-28)
 
 
