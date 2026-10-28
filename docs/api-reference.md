@@ -84,6 +84,7 @@ payload shapes.
 | `set_advance(hub_id, appliance_ids, *, enable=True, temperature=None)` | `None` | Advance to the next schedule period (`ApplianceModes=16`); sends the `255` sentinel when no temperature is given. |
 | `set_manual(hub_id, appliance_ids, *, temperature, enable=True)` | `None` | Hold a manual setpoint (`ApplianceModes=128`). |
 | `set_eco_mode(hub_id, appliance_ids, *, temperature, enable=True)` | `None` | Engage Eco mode (`ApplianceModes=64`). Not the same as `set_eco_start`. |
+| `set_schedule_profile(hub_id, appliance_ids, profile)` | `None` | Apply a schedule profile (`ApplianceModes=1` with the profile in `StatusTwo`). `profile` is a `ScheduleProfile` or its int value. |
 | `set_setback_temperature(hub_id, appliance_ids, *, temperature, status=SetbackStatus.ACTIVE)` | `None` | Write the setback temperature, clamped into 7–30 °C as the setpoint write is. **Untested.** |
 | `set_eco_start(hub_id, appliance_ids, enable)` | `None` | Toggle the EcoStart pre-heat setting. |
 | `set_open_window_detection(hub_id, appliance_ids, enable)` | `None` | Toggle Open Window Detection. |
@@ -92,7 +93,7 @@ payload shapes.
 | `copy_schedule_to_appliances(hub_id, from_appliance_id, appliance_ids, *, timer_mode=0)` | `None` | Copy one appliance's schedule onto others. |
 | `set_mode(hub_id, appliance_id, mode)` | `None` | Rewrite `TimerMode` via the schedule editor. **Quantum returns HTTP 403** — use `turn_off` / `set_appliance_setpoint_temperature` instead. |
 | `set_target_temperature(hub_id, appliance_id, temp)` | `None` | **Deprecated.** Rewrites all period setpoints via `SetTimerMode`; 403 on Quantum. |
-| `set_mode_flag(hub_id, appliance_ids, mode, *, enable=True, temperature=None, minutes=0, until=None, ...)` | `None` | Low-level: engage/clear any single mode bit. |
+| `set_mode_flag(hub_id, appliance_ids, mode, *, enable=True, temperature=None, minutes=0, until=None, status_two=0, ...)` | `None` | Low-level: engage/clear any single mode bit. `status_two` carries the schedule profile (`ScheduleProfile`) for timer-mode writes. |
 | `set_appliance_mode(hub_id, appliance_ids, mode_settings)` | `None` | Lowest-level: send a full `ApplianceModeSettings` payload. |
 
 ### Methods — hot-water cylinders
