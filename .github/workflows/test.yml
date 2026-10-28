@@ -164,14 +164,14 @@ jobs:
   # `pyproject.toml` — which is all a release-please PR does — leaves the lock
   # stale. Nothing caught that: `uv sync --frozen` trusts the lock, and `uv run`
   # silently rewrites it, so the drift was invisible until someone ran a command
-  # that happened to repair it. Both the 0.14.0 and 0.15.0 releases left `main`
+  # that happened to repair it. The 0.14.0 through 0.16.0 releases all left `main`
   # recording the previous version.
   #
-  # Skipped for release-please's own branch, and deliberately: that PR bumps the
-  # version by definition, so this would fail on every release, and a release that
-  # cannot satisfy a check only it can trigger is worse than the drift. Re-lock on
-  # `main` after the release merges — `uv lock`, commit, done. CONTRIBUTING.md says
-  # the same thing under Releases.
+  # Skipped for release-please's own branch, and deliberately: the relock-release
+  # workflow re-locks that branch in place, and this job's result would predate
+  # its push on the first run. If the relock job fails it fails visibly on the
+  # release PR; a release that cannot satisfy a check only it can trigger is
+  # worse than the drift it would report.
   lockfile:
     needs: changes
     if: >-

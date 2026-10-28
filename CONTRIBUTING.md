@@ -98,11 +98,12 @@ Merging a release-please PR will:
   be configured in PyPI project settings).
 
 The release bumps the version in `pyproject.toml`, and `uv.lock` records that same
-version — so a release leaves the lock stale. Nothing in the test matrix notices:
-`uv sync --frozen` trusts the lock as written, and `uv run` quietly rewrites it. After a
-release lands on `main`, run `uv lock` and commit the result. CI's `lockfile` job reports
-the drift, and deliberately skips release-please's own PR, because the release is what
-creates the drift and a release should not be blocked on a commit it cannot make itself.
+version — so a release PR starts out with a stale lock. The `relock-release`
+workflow re-locks the release PR in place (and no-ops when already current),
+so the merged release is consistent and no manual step follows it. CI's
+`lockfile` job still skips release-please's own PR, because its result would
+predate the relock push; if the relock job fails it fails visibly on the
+release PR instead.
 
 ## Any contributions you make will be under the MIT Software License
 
