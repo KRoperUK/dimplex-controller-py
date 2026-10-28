@@ -417,19 +417,38 @@ class DimplexControl:
             return []
         return [ProductModel.model_validate(item) for item in data]
 
-    async def get_appliance_features(self, hub_id: str, appliance_id: str) -> TimerModeSettings:
-        """Get timer details (and mode) for an appliance."""
+    async def get_appliance_features(
+        self,
+        hub_id: str,
+        appliance_id: str,
+        *,
+        timer_mode: int | ScheduleProfile = 0,
+    ) -> TimerModeSettings:
+        """Get a profile's timer periods for an appliance.
+
+        ``timer_mode`` selects which profile's periods come back (0 = user
+        timer, 1 = home all day, 2 = out all day); the app fetches each profile
+        separately and caches one entry per value. The response ``TimerMode``
+        echoes the request — it is not the active schedule, which lives in
+        ``ApplianceStatus.StatusTwo`` (dimplex-controller-py#149).
+        """
         payload = {
             "HubId": hub_id,
             "ApplianceId": appliance_id,
-            "TimerMode": 0,  # Required field in request; value ignored on read
+            "TimerMode": int(timer_mode),
         }
         data = await self._request("POST", "/RemoteControl/GetTimerModeDetailsForAppliance", json=payload)
         return TimerModeSettings.model_validate(data)
 
-    async def get_schedule(self, hub_id: str, appliance_id: str) -> TimerModeSettings:
-        """Return the current timer mode + periods (alias of :meth:`get_appliance_features`)."""
-        return await self.get_appliance_features(hub_id, appliance_id)
+    async def get_schedule(
+        self,
+        hub_id: str,
+        appliance_id: str,
+        *,
+        timer_mode: int | ScheduleProfile = 0,
+    ) -> TimerModeSettings:
+        """Return a profile's timer periods (alias of :meth:`get_appliance_features`)."""
+        return await self.get_appliance_features(hub_id, appliance_id, timer_mode=timer_mode)
 
     async def _write_timer_settings(self, settings: TimerModeSettings) -> TimerModeSettings:
         """POST a full :class:`TimerModeSettings` payload and return it."""

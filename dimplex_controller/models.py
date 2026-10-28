@@ -15,6 +15,13 @@ class TimerMode(IntEnum):
 
     Exact product names vary by appliance firmware; these are the values used
     by the Dimplex Control mobile client and reverse-engineered traffic.
+
+    .. caution::
+       App 2.29.1 uses 0/1/2 here as the *profile* domain (user timer, home all
+       day, out all day) and has no manual/frost/off timer modes — those go
+       through ``SetApplianceMode`` mode bits instead. ``MANUAL``,
+       ``FROST_PROTECTION`` and ``OFF`` are therefore unverified in that client
+       and kept only because consumers map them (dimplex-controller-py#149).
     """
 
     USER_TIMER = 0

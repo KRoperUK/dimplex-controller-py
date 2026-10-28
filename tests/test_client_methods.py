@@ -91,6 +91,27 @@ async def test_set_mode_reads_then_writes(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_get_schedule_requests_named_profile(aresponses):
+    """The request ``TimerMode`` selects which profile's periods come back.
+
+    The app fetches timer details per profile (0/1/2) and the response echoes
+    the request — the value is not "ignored on read" (py#149).
+    """
+    captured: dict = {}
+
+    async def get_handler(request):
+        captured["body"] = await request.json()
+        return _json(aresponses, _TIMER_BODY)
+
+    aresponses.add(HOST, "/api/RemoteControl/GetTimerModeDetailsForAppliance", "POST", get_handler)
+
+    async with aiohttp.ClientSession() as session:
+        await _authed(session).get_schedule("hub-1", "a-1", timer_mode=2)
+
+    assert captured["body"]["TimerMode"] == 2
+
+
+@pytest.mark.asyncio
 async def test_update_period_replaces_matched(aresponses):
     """update_period swaps the period matched by day + start time."""
     captured: dict = {}

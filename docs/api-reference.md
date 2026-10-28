@@ -61,8 +61,8 @@ DimplexControl(
 | `get_appliance_overview_map(hub_id, appliance_ids)` | `dict[str, ApplianceStatus \| None]` | Stable id → status mapping (missing = `None`). |
 | `get_user_context()` | `UserContext` | Authenticated user profile. |
 | `get_product_models()` | `list[ProductModel]` | Cloud product catalogue (cacheable). |
-| `get_appliance_features(hub_id, appliance_id)` | `TimerModeSettings` | Timer mode + periods for an appliance. |
-| `get_schedule(hub_id, appliance_id)` | `TimerModeSettings` | Alias of `get_appliance_features`. |
+| `get_appliance_features(hub_id, appliance_id, *, timer_mode=0)` | `TimerModeSettings` | One profile's timer periods. `timer_mode` (0/1/2) selects the profile; the response `TimerMode` echoes it and is not the active schedule (see `ApplianceStatus.StatusTwo`). |
+| `get_schedule(hub_id, appliance_id, *, timer_mode=0)` | `TimerModeSettings` | Alias of `get_appliance_features`. |
 | `get_tsi_energy_report(hub_id, ...)` | `TsiEnergyReport` | Per-appliance energy telemetry for a Hub. |
 
 ### Methods — write
@@ -262,6 +262,10 @@ Values for `TimerModeSettings.TimerMode`.
 | `1` | `MANUAL` |
 | `2` | `FROST_PROTECTION` |
 | `3` | `OFF` |
+
+> App 2.29.1 uses 0/1/2 here as the *profile* domain (user timer, home all day,
+> out all day); `MANUAL`, `FROST_PROTECTION` and `OFF` are unverified in that
+> client and kept because consumers map them (py#149).
 
 ### `ApplianceModeFlag` (IntFlag)
 
