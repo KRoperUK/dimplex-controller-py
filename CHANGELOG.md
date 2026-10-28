@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.16.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.15.1...v0.16.0) (2026-10-28)
+
+
+### Features
+
+* support StatusTwo schedule-profile writes ([#150](https://github.com/KRoperUK/dimplex-controller-py/issues/150)) ([269cb4d](https://github.com/KRoperUK/dimplex-controller-py/commit/269cb4d340e49ea097c33e582dd67c2c6665f087))
+
+
+### Bug Fixes
+
+* treat GetTimerModeDetails TimerMode as a profile selector ([#152](https://github.com/KRoperUK/dimplex-controller-py/issues/152)) ([31ecaeb](https://github.com/KRoperUK/dimplex-controller-py/commit/31ecaebb5640ebd04759edce9c2f74e5ad1832fe)), closes [#149](https://github.com/KRoperUK/dimplex-controller-py/issues/149)
+
 ## [0.15.1](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.15.0...v0.15.1) (2026-10-26)
 
 
