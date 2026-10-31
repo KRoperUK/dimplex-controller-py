@@ -63,6 +63,7 @@ DimplexControl(
 | `get_product_models()` | `list[ProductModel]` | Cloud product catalogue (cacheable). |
 | `get_appliance_features(hub_id, appliance_id, *, timer_mode=0)` | `TimerModeSettings` | One profile's timer periods. `timer_mode` (0/1/2) selects the profile; the response `TimerMode` echoes it and is not the active schedule (see `ApplianceStatus.StatusTwo`). |
 | `get_schedule(hub_id, appliance_id, *, timer_mode=0)` | `TimerModeSettings` | Alias of `get_appliance_features`. |
+| `get_profiles()` | `list[UserHeatingProfile]` | Saved heating profiles (`GET`, no body). Extra `Formatted*`/back-reference keys are ignored. |
 | `get_tsi_energy_report(hub_id, ...)` | `TsiEnergyReport` | Per-appliance energy telemetry for a Hub. |
 
 ### Methods — write
@@ -91,6 +92,10 @@ payload shapes.
 | `set_period_setpoint(hub_id, appliance_id, *, day_of_week, start_time, temperature, end_time=None)` | `TimerModeSettings` | Update one timer period's setpoint without clobbering others. |
 | `update_period(hub_id, appliance_id, period, *, match_start_time=None)` | `TimerModeSettings` | Replace one timer period matched by day + start time. |
 | `copy_schedule_to_appliances(hub_id, from_appliance_id, appliance_ids, *, timer_mode=0)` | `None` | Copy one appliance's schedule onto others. |
+| `apply_profile_to_timer(hub_id, appliance_ids, profile, profile_id)` | `ApplyProfileToTimerResult` | Apply a saved profile to timers. `profile` is the 0/1/2 selector (`ScheduleProfile`), sent in the request `TimerMode` — same domain as `EStatusTwo`, not an operation mode. |
+| `add_or_update_profile_periods(profile, *, retry_count=0)` | `str` | Save a profile's periods; returns the profile id. `retry_count` is the app's attempt counter (starts 0). |
+| `rename_profile(profile_id, profile_name)` | `bool` | Rename a saved profile. |
+| `delete_profile(profile_id)` | `None` | Delete a saved profile. Posts the id as a bare JSON string, like the app. |
 | `set_mode(hub_id, appliance_id, mode)` | `None` | Rewrite `TimerMode` via the schedule editor. **Quantum returns HTTP 403** — use `turn_off` / `set_appliance_setpoint_temperature` instead. |
 | `set_target_temperature(hub_id, appliance_id, temp)` | `None` | **Deprecated.** Rewrites all period setpoints via `SetTimerMode`; 403 on Quantum. |
 | `set_mode_flag(hub_id, appliance_ids, mode, *, enable=True, temperature=None, minutes=0, until=None, status_two=0, ...)` | `None` | Low-level: engage/clear any single mode bit. `status_two` carries the schedule profile (`ScheduleProfile`) for timer-mode writes. |
@@ -306,6 +311,30 @@ Values for `TimerModeSettings.TimerMode`.
 ### `ScheduleProfile` (IntEnum)
 
 `EStatusTwo`: `USER_TIMER = 0`, `HOME_ALL_DAY = 1`, `OUT_ALL_DAY = 2`.
+
+### `UserHeatingProfile`
+
+| Field | Type |
+|-------|------|
+| `Id` | `str` (Guid) |
+| `ProfileName` | `str` |
+| `UserHeatingProfilePeriods` | `list[UserHeatingProfilePeriod]` |
+
+### `UserHeatingProfilePeriod`
+
+| Field | Type |
+|-------|------|
+| `UserHeatingProfileId` | `str` (Guid) |
+| `DayOfWeek` | `int` (0=Sun … 6=Sat) |
+| `StartTime` | `str` (`"HH:MM:SS"`) |
+| `EndTime` | `str` (`"HH:MM:SS"`) |
+| `Temperature` | `int` (whole °C) |
+
+### `ApplyProfileToTimerResult` (IntEnum)
+
+Outcome of `apply_profile_to_timer`, as decompiled from Dimplex Control APK
+2.29.1 (`ApplyProfileToTimerResult`): `SUCCESSFUL = 0`,
+`PROFILE_DOES_NOT_EXIST = 1`, `ERROR = 2`.
 
 ### `HygieneFrequency` (IntEnum)
 

@@ -14,6 +14,7 @@ from dimplex_controller.const import NO_SETPOINT_SENTINEL, NULL_DATETIME
 from dimplex_controller.exceptions import DimplexApiError
 from dimplex_controller.models import (
     ApplianceModeFlag,
+    ApplyProfileToTimerResult,
     HeatPumpHwcPeriod,
     HeatPumpHwcSchedule,
     HygieneFrequency,
@@ -22,6 +23,8 @@ from dimplex_controller.models import (
     TimerMode,
     TimerModeSettings,
     TimerPeriod,
+    UserHeatingProfile,
+    UserHeatingProfilePeriod,
     Zone,
 )
 
@@ -747,3 +750,198 @@ async def test_set_hot_water_holiday_sends_holiday_with_rounded_up_days(arespons
     assert off["Settings"]["Date"] == NULL_DATETIME
 
     assert bodies[2][0] == "/api/RemoteControl/SetApplianceModeHwc"
+
+
+_PROFILE_BODY = (
+    '[{"Id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","ProfileName":"Winter",'
+    '"FormattedProfileName":"Winter (3 periods)",'
+    '"UserHeatingProfilePeriods":[{"UserHeatingProfileId":"3fa85f64-5717-4562-b3fc-2c963f66afa6",'
+    '"DayOfWeek":1,"StartTime":"06:00:00","EndTime":"09:00:00","Temperature":18,'
+    '"FormattedStartTime":"06:00","FormattedTemperatureString":"18°",'
+    '"UserHeatingProfile":null}]}]'
+)
+
+
+@pytest.mark.asyncio
+async def test_get_profiles_parses_list_and_ignores_display_extras(aresponses):
+    """GetProfiles is a GET returning a profile list; display extras are ignored.
+
+    The app's ``APIService.GetProfiles`` goes through ``GetSecureAsync`` (HTTP
+    GET, no body) and the response carries ``Formatted*`` display strings plus
+    a ``UserHeatingProfile`` back-reference that carry no schedule meaning
+    (dimplex-controller-py#148).
+    """
+
+    async def handler(request):
+        assert request.method == "GET"
+        return _json(aresponses, _PROFILE_BODY)
+
+    aresponses.add(HOST, "/api/UserHeatingProfile/GetProfiles", "GET", handler)
+
+    async with aiohttp.ClientSession() as session:
+        profiles = await _authed(session).get_profiles()
+
+    assert len(profiles) == 1
+    profile = profiles[0]
+    assert isinstance(profile, UserHeatingProfile)
+    assert profile.Id == "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+    assert profile.ProfileName == "Winter"
+    (period,) = profile.UserHeatingProfilePeriods
+    assert period.DayOfWeek == 1
+    assert period.StartTime == "06:00:00"
+    assert period.EndTime == "09:00:00"
+    assert period.Temperature == 18
+    assert period.start_time_obj is not None and period.start_time_obj.hour == 6
+
+
+@pytest.mark.asyncio
+async def test_get_profiles_empty_when_no_body(aresponses):
+    """An empty 200 body from GetProfiles means no saved profiles."""
+
+    async def handler(request):
+        return aresponses.Response(status=200, body="")
+
+    aresponses.add(HOST, "/api/UserHeatingProfile/GetProfiles", "GET", handler)
+
+    async with aiohttp.ClientSession() as session:
+        assert await _authed(session).get_profiles() == []
+
+
+@pytest.mark.asyncio
+async def test_apply_profile_to_timer_sends_selector_and_maps_result(aresponses):
+    """Apply sends HubId/ids/selector/profile id and maps the int outcome.
+
+    The request ``TimerMode`` is the 0/1/2 profile selector (``EStatusTwo``),
+    not an operation mode, and the raw int reply maps to
+    ``ApplyProfileToTimerResult`` (dimplex-controller-py#148).
+    """
+    bodies: list[dict] = []
+
+    def handler(body: str):
+        async def _handler(request):
+            bodies.append(await request.json())
+            return _json(aresponses, body)
+
+        return _handler
+
+    aresponses.add(HOST, "/api/UserHeatingProfile/ApplyProfileToTimer", "POST", handler("0"))
+    aresponses.add(HOST, "/api/UserHeatingProfile/ApplyProfileToTimer", "POST", handler("1"))
+    aresponses.add(HOST, "/api/UserHeatingProfile/ApplyProfileToTimer", "POST", handler("2"))
+
+    async with aiohttp.ClientSession() as session:
+        client = _authed(session)
+        ok = await client.apply_profile_to_timer("hub-1", ["a-1"], ScheduleProfile.OUT_ALL_DAY, "p-1")
+        missing = await client.apply_profile_to_timer("hub-1", ["a-1"], 0, "p-2")
+        err = await client.apply_profile_to_timer("hub-1", ["a-1"], 1, "p-3")
+
+    assert ok is ApplyProfileToTimerResult.SUCCESSFUL
+    assert missing is ApplyProfileToTimerResult.PROFILE_DOES_NOT_EXIST
+    assert err is ApplyProfileToTimerResult.ERROR
+    assert bodies[0] == {
+        "HubId": "hub-1",
+        "ListOfApplianceIds": ["a-1"],
+        "TimerMode": 2,
+        "ProfileId": "p-1",
+    }
+    assert bodies[1]["TimerMode"] == 0
+    assert bodies[2]["TimerMode"] == 1
+
+
+def _winter_profile() -> UserHeatingProfile:
+    return UserHeatingProfile(
+        Id="3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        ProfileName="Winter",
+        UserHeatingProfilePeriods=[
+            UserHeatingProfilePeriod(
+                UserHeatingProfileId="3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                DayOfWeek=1,
+                StartTime="06:00:00",
+                EndTime="09:00:00",
+                Temperature=18,
+            )
+        ],
+    )
+
+
+@pytest.mark.asyncio
+async def test_add_or_update_profile_periods_posts_profile_and_returns_id(aresponses):
+    """Saving periods wraps the profile in AddEditProfileRequest (retry starts 0)."""
+    bodies: list[dict] = []
+
+    async def handler(request):
+        bodies.append(await request.json())
+        return _json(aresponses, '"3fa85f64-5717-4562-b3fc-2c963f66afa6"')
+
+    url = "/api/UserHeatingProfile/AddOrUpdateProfilePeriodsWithAddEditProfileRequest"
+    aresponses.add(HOST, url, "POST", handler)
+    aresponses.add(HOST, url, "POST", handler)
+
+    async with aiohttp.ClientSession() as session:
+        client = _authed(session)
+        returned = await client.add_or_update_profile_periods(_winter_profile())
+        await client.add_or_update_profile_periods(_winter_profile(), retry_count=2)
+
+    assert returned == "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+    assert bodies[0] == {
+        "UserHeatingProfile": {
+            "Id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "ProfileName": "Winter",
+            "UserHeatingProfilePeriods": [
+                {
+                    "UserHeatingProfileId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                    "DayOfWeek": 1,
+                    "StartTime": "06:00:00",
+                    "EndTime": "09:00:00",
+                    "Temperature": 18,
+                }
+            ],
+        },
+        "RetryCount": 0,
+    }
+    assert bodies[1]["RetryCount"] == 2
+
+
+@pytest.mark.asyncio
+async def test_rename_profile_posts_id_and_name(aresponses):
+    """RenameProfile posts the id + name pair and returns the bool outcome."""
+    bodies: list[dict] = []
+
+    def handler(body: str):
+        async def _handler(request):
+            bodies.append(await request.json())
+            return _json(aresponses, body)
+
+        return _handler
+
+    aresponses.add(HOST, "/api/UserHeatingProfile/RenameProfile", "POST", handler("true"))
+    aresponses.add(HOST, "/api/UserHeatingProfile/RenameProfile", "POST", handler("false"))
+
+    async with aiohttp.ClientSession() as session:
+        client = _authed(session)
+        assert await client.rename_profile("p-1", "Winter") is True
+        assert await client.rename_profile("p-1", "Summer") is False
+
+    assert bodies[0] == {"ProfileId": "p-1", "ProfileName": "Winter"}
+    assert bodies[1] == {"ProfileId": "p-1", "ProfileName": "Summer"}
+
+
+@pytest.mark.asyncio
+async def test_delete_profile_posts_bare_guid_string(aresponses):
+    """DeleteProfile posts the id as a bare JSON string and reads no response.
+
+    The app serialises just the Guid (``JsonConvert.SerializeObject``) via
+    ``PostSecureAsyncNoRes``, so the body is ``"<guid>"`` with quotes and an
+    empty 200 reply is success (dimplex-controller-py#148).
+    """
+    raw_bodies: list[str] = []
+
+    async def handler(request):
+        raw_bodies.append(await request.text())
+        return aresponses.Response(status=200, body="")
+
+    aresponses.add(HOST, "/api/UserHeatingProfile/DeleteProfile", "POST", handler)
+
+    async with aiohttp.ClientSession() as session:
+        assert await _authed(session).delete_profile("p-1") is None
+
+    assert raw_bodies == ['"p-1"']
