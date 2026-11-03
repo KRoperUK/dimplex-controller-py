@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.17.2](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.17.1...v0.17.2) (2026-11-03)
+
+
+### Bug Fixes
+
+* type the copy selector as ScheduleProfile, not TimerMode ([#162](https://github.com/KRoperUK/dimplex-controller-py/issues/162)) ([b4d6da3](https://github.com/KRoperUK/dimplex-controller-py/commit/b4d6da3fb992e63a055770f4442a1f1b2397ac7e))
+
 ## [0.17.1](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.17.0...v0.17.1) (2026-11-03)
 
 
