@@ -1084,9 +1084,13 @@ class DimplexControl:
         from_appliance_id: str,
         appliance_ids: list[str],
         *,
-        timer_mode: int | TimerMode = 0,
+        timer_mode: int | ScheduleProfile = 0,
     ) -> None:
-        """Copy one appliance's schedule onto others (``CopyScheduleToAppliances``)."""
+        """Copy one appliance's schedule onto others (``CopyScheduleToAppliances``).
+
+        ``timer_mode`` is the profile selector (a :class:`ScheduleProfile`
+        or 0/1/2), echoed back by the cloud — not an operation mode.
+        """
         payload = {
             "HubId": hub_id,
             "FromApplianceId": from_appliance_id,
