@@ -140,6 +140,63 @@ async def test_update_period_replaces_matched(aresponses):
 
 
 @pytest.mark.asyncio
+async def test_schedule_writes_request_the_given_profile(aresponses):
+    """Write helpers forward timer_mode so edits land on the active profile.
+
+    Regression test for #157: every helper used to read profile 0
+    unconditionally, so edits made while Home/Out All Day was active rewrote
+    the user timer instead.
+    """
+    requested: list[dict] = []
+
+    async def get_handler(request):
+        requested.append(await request.json())
+        return _json(aresponses, _TIMER_BODY)
+
+    aresponses.add(HOST, "/api/RemoteControl/GetTimerModeDetailsForAppliance", "POST", get_handler)
+    aresponses.add(HOST, "/api/RemoteControl/GetTimerModeDetailsForAppliance", "POST", get_handler)
+    aresponses.add(HOST, "/api/RemoteControl/GetTimerModeDetailsForAppliance", "POST", get_handler)
+    aresponses.add(HOST, "/api/RemoteControl/GetTimerModeDetailsForAppliance", "POST", get_handler)
+    aresponses.add(HOST, "/api/RemoteControl/SetTimerMode", "POST", _json(aresponses))
+    aresponses.add(HOST, "/api/RemoteControl/SetTimerMode", "POST", _json(aresponses))
+    aresponses.add(HOST, "/api/RemoteControl/SetTimerMode", "POST", _json(aresponses))
+    aresponses.add(HOST, "/api/RemoteControl/SetTimerMode", "POST", _json(aresponses))
+
+    new_period = TimerPeriod(DayOfWeek=1, StartTime="06:00:00", EndTime="10:00:00", Temperature=19.5)
+
+    async with aiohttp.ClientSession() as session:
+        client = _authed(session)
+        await client.set_mode("hub-1", "a-1", TimerMode.USER_TIMER, timer_mode=2)
+        await client.set_period_setpoint(
+            "hub-1", "a-1", day_of_week=1, start_time="06:00:00", temperature=19.5, timer_mode=2
+        )
+        await client.update_period("hub-1", "a-1", new_period, timer_mode=2)
+        await client.set_target_temperature("hub-1", "a-1", 20.0, timer_mode=2)
+
+    assert [body["TimerMode"] for body in requested] == [2, 2, 2, 2]
+
+
+@pytest.mark.asyncio
+async def test_schedule_writes_default_to_user_timer(aresponses):
+    """Omitting timer_mode preserves the old profile-0 behaviour."""
+    requested: list[dict] = []
+
+    async def get_handler(request):
+        requested.append(await request.json())
+        return _json(aresponses, _TIMER_BODY)
+
+    aresponses.add(HOST, "/api/RemoteControl/GetTimerModeDetailsForAppliance", "POST", get_handler)
+    aresponses.add(HOST, "/api/RemoteControl/SetTimerMode", "POST", _json(aresponses))
+
+    new_period = TimerPeriod(DayOfWeek=1, StartTime="06:00:00", EndTime="10:00:00", Temperature=19.5)
+
+    async with aiohttp.ClientSession() as session:
+        await _authed(session).update_period("hub-1", "a-1", new_period)
+
+    assert [body["TimerMode"] for body in requested] == [0]
+
+
+@pytest.mark.asyncio
 async def test_update_period_missing_raises(aresponses):
     """update_period raises when no period matches the key."""
     aresponses.add(HOST, "/api/RemoteControl/GetTimerModeDetailsForAppliance", "POST", _json(aresponses, _TIMER_BODY))

@@ -458,10 +458,19 @@ class DimplexControl:
         await self._request("POST", "/RemoteControl/SetTimerMode", json=payload)
         return settings
 
-    async def set_mode(self, hub_id: str, appliance_id: str, mode: int | TimerMode) -> None:
+    async def set_mode(
+        self,
+        hub_id: str,
+        appliance_id: str,
+        mode: int | TimerMode,
+        *,
+        timer_mode: int | ScheduleProfile = 0,
+    ) -> None:
         """Set the timer / operation mode by rewriting ``TimerModeSettings``.
 
         See :class:`~dimplex_controller.models.TimerMode` for known values.
+        ``timer_mode`` selects which stored profile is read and rewritten
+        (0 = user timer, 1 = home all day, 2 = out all day).
 
         .. warning::
            ``SetTimerMode`` is the *schedule editor* endpoint. Quantum (and
@@ -470,7 +479,7 @@ class DimplexControl:
            :meth:`turn_off`; to change the setpoint use
            :meth:`set_appliance_setpoint_temperature`.
         """
-        current = await self.get_appliance_features(hub_id, appliance_id)
+        current = await self.get_appliance_features(hub_id, appliance_id, timer_mode=timer_mode)
         current.TimerMode = int(mode)
         await self._write_timer_settings(current)
 
@@ -483,13 +492,16 @@ class DimplexControl:
         start_time: str,
         temperature: float,
         end_time: str | None = None,
+        timer_mode: int | ScheduleProfile = 0,
     ) -> TimerModeSettings:
         """Update one timer period's setpoint (and optional end) without clobbering others.
 
         Matches periods by ``DayOfWeek`` + ``StartTime``. Raises ``ValueError`` if
         no period matches. Prefer this over rewriting the whole schedule.
+        ``timer_mode`` selects which stored profile is edited
+        (0 = user timer, 1 = home all day, 2 = out all day).
         """
-        current = await self.get_appliance_features(hub_id, appliance_id)
+        current = await self.get_appliance_features(hub_id, appliance_id, timer_mode=timer_mode)
         matched = False
         for period in current.TimerPeriods:
             if period.DayOfWeek == day_of_week and period.StartTime == start_time:
@@ -509,21 +521,31 @@ class DimplexControl:
         period: TimerPeriod,
         *,
         match_start_time: str | None = None,
+        timer_mode: int | ScheduleProfile = 0,
     ) -> TimerModeSettings:
         """Replace a single period matched by day + start time (read-modify-write).
 
         ``match_start_time`` defaults to ``period.StartTime`` so callers can also
         change the period's start by passing the previous start string.
+        ``timer_mode`` selects which stored profile is edited
+        (0 = user timer, 1 = home all day, 2 = out all day).
         """
         key_start = match_start_time if match_start_time is not None else period.StartTime
-        current = await self.get_appliance_features(hub_id, appliance_id)
+        current = await self.get_appliance_features(hub_id, appliance_id, timer_mode=timer_mode)
         for index, existing in enumerate(current.TimerPeriods):
             if existing.DayOfWeek == period.DayOfWeek and existing.StartTime == key_start:
                 current.TimerPeriods[index] = period
                 return await self._write_timer_settings(current)
         raise ValueError(f"No timer period for day={period.DayOfWeek} start={key_start!r} on appliance {appliance_id}")
 
-    async def set_target_temperature(self, hub_id: str, appliance_id: str, temp: float) -> None:
+    async def set_target_temperature(
+        self,
+        hub_id: str,
+        appliance_id: str,
+        temp: float,
+        *,
+        timer_mode: int | ScheduleProfile = 0,
+    ) -> None:
         """Set the target temperature by **rewriting the timer schedule**.
 
         .. deprecated:: 0.13.0
@@ -545,8 +567,11 @@ class DimplexControl:
         **Note:** unlike :meth:`set_period_setpoint`, this updates *all* period
         temperatures (or installs a full-week schedule). Use the period helpers
         when only one window should change.
+
+        ``timer_mode`` selects which stored profile is edited
+        (0 = user timer, 1 = home all day, 2 = out all day).
         """
-        current = await self.get_appliance_features(hub_id, appliance_id)
+        current = await self.get_appliance_features(hub_id, appliance_id, timer_mode=timer_mode)
 
         if current.TimerPeriods:
             for period in current.TimerPeriods:

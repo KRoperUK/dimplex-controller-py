@@ -22,6 +22,13 @@ class TimerMode(IntEnum):
        through ``SetApplianceMode`` mode bits instead. ``MANUAL``,
        ``FROST_PROTECTION`` and ``OFF`` are therefore unverified in that client
        and kept only because consumers map them (dimplex-controller-py#149).
+
+    .. warning::
+       The cloud *echoes* the requested profile selector back in this field,
+       so a response ``TimerMode`` of 1 or 2 names the profile that was read
+       (home/out all day), **not** an operation mode. Never interpret the
+       response value as the active schedule either — that lives in
+       ``ApplianceStatus.StatusTwo`` (dimplex-controller-py#149).
     """
 
     USER_TIMER = 0
