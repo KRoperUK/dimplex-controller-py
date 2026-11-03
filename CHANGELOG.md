@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.17.1](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.17.0...v0.17.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* thread the TimerMode profile selector through schedule writes ([#159](https://github.com/KRoperUK/dimplex-controller-py/issues/159)) ([add29c1](https://github.com/KRoperUK/dimplex-controller-py/commit/add29c1937657e7a8271144b5663738b047a3c86))
+
 ## [0.17.0](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.16.0...v0.17.0) (2026-10-31)
 
 
