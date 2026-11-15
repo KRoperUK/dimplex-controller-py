@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from enum import IntEnum, IntFlag
 from typing import Any
 
@@ -224,6 +224,21 @@ class Appliance(BaseModel):
         """Map the cloud's unset-date sentinel to ``None`` rather than year 1."""
         return _map_null_datetime(value)
 
+    @field_validator("InstallationDate", "LastTelemDate", mode="after")
+    @classmethod
+    def _assume_utc_for_naive_dates(cls, value: datetime | None) -> datetime | None:
+        """Treat a naive timestamp as UTC so callers always get an aware value.
+
+        The cloud mixes ``Z``-suffixed and bare wall-clock strings for the same
+        field (``LastTelemDate`` arrived both ways), and a naive value crashes
+        Home Assistant timestamp sensors, which require tz-aware datetimes
+        (dimplex-controller-hass#345). UTC matches the offset the field carries
+        when the cloud does send one.
+        """
+        if isinstance(value, datetime) and value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
     @field_validator("ProductModelExtensions", mode="before")
     @classmethod
     def _coerce_provisioning_extensions(cls, value: Any) -> dict[str, str] | None:
@@ -292,6 +307,14 @@ class Hub(BaseModel):
     def _map_null_dates(cls, value: Any) -> Any:
         """Map the cloud's unset-date sentinel to ``None`` rather than year 1."""
         return _map_null_datetime(value)
+
+    @field_validator("HubRegistrationDate", "InstallationDate", "LastTelemDate", mode="after")
+    @classmethod
+    def _assume_utc_for_naive_dates(cls, value: datetime | None) -> datetime | None:
+        """Treat a naive timestamp as UTC; see ``Appliance`` for why (dimplex-controller-hass#345)."""
+        if isinstance(value, datetime) and value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
 
 
 class TimerPeriod(BaseModel):
