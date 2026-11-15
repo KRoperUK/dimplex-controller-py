@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.17.3](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.17.2...v0.17.3) (2026-11-15)
+
+
+### Bug Fixes
+
+* assume UTC for naive datetimes ([#165](https://github.com/KRoperUK/dimplex-controller-py/issues/165)) ([9df202a](https://github.com/KRoperUK/dimplex-controller-py/commit/9df202a44f7925f4be1c5818970c7f06c050b8fa))
+
 ## [0.17.2](https://github.com/KRoperUK/dimplex-controller-py/compare/v0.17.1...v0.17.2) (2026-11-03)
 
 
