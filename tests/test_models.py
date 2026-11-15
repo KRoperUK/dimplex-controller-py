@@ -462,7 +462,7 @@ def test_null_datetime_sentinel_from_an_already_parsed_datetime():
 
 
 def test_real_datetimes_still_parse_including_fractional_seconds():
-    """A real timestamp is untouched by the sentinel mapping."""
+    """A real timestamp is untouched by the sentinel mapping; naive reads as UTC."""
     appliance = Appliance.model_validate(
         {
             "ApplianceId": "a1",
@@ -474,11 +474,57 @@ def test_real_datetimes_still_parse_including_fractional_seconds():
             "LastTelemDate": "2026-06-12T09:45:34.89Z",
         }
     )
-    assert appliance.InstallationDate == datetime(2025, 11, 2, 8, 15)
+    # Bare wall-clock strings are assumed UTC (dimplex-controller-hass#345);
+    # the old naive expectation below encoded the crash, not the contract.
+    assert appliance.InstallationDate == datetime(2025, 11, 2, 8, 15, tzinfo=timezone.utc)
     assert appliance.LastTelemDate == datetime(2026, 6, 12, 9, 45, 34, 890000, tzinfo=timezone.utc)
 
+
+def test_naive_datetimes_become_aware_utc():
+    """The cloud's bare ``LastTelemDate`` must not stay naive (dimplex-controller-hass#345).
+
+    HA timestamp sensors reject naive datetimes, so the exact value from the
+    report (space separator, no offset) has to arrive tz-aware.
+    """
+    appliance = Appliance.model_validate(
+        {
+            "ApplianceId": "a1",
+            "ApplianceType": "QRAD",
+            "ApplianceModel": "QRAD200E",
+            "ZoneId": "z1",
+            "FriendlyName": "Room",
+            "ZoneName": "Room",
+            "LastTelemDate": "2026-11-04 20:46:26.617000",
+        }
+    )
+    assert appliance.LastTelemDate == datetime(2026, 11, 4, 20, 46, 26, 617000, tzinfo=timezone.utc)
+
+    hand_built = Appliance(
+        ApplianceId="a1",
+        ApplianceType="QRAD",
+        ZoneId="z1",
+        FriendlyName="Room",
+        ZoneName="Room",
+        LastTelemDate=datetime(2026, 11, 4, 20, 46, 26, 617000),
+    )
+    assert hand_built.LastTelemDate is not None
+    assert hand_built.LastTelemDate.tzinfo == timezone.utc
+
+    offset = Appliance.model_validate(
+        {
+            "ApplianceId": "a1",
+            "ApplianceType": "QRAD",
+            "ZoneId": "z1",
+            "FriendlyName": "Room",
+            "ZoneName": "Room",
+            "LastTelemDate": "2026-11-04T20:46:26+00:00",
+        }
+    )
+    assert offset.LastTelemDate is not None
+    assert offset.LastTelemDate.tzinfo is not None
+
     hub = Hub.model_validate({"HubId": "h1", "HubRegistrationDate": "2024-03-01T00:00:00.123456"})
-    assert hub.HubRegistrationDate == datetime(2024, 3, 1, 0, 0, 0, 123456)
+    assert hub.HubRegistrationDate == datetime(2024, 3, 1, 0, 0, 0, 123456, tzinfo=timezone.utc)
 
 
 def test_timer_period_malformed_time_returns_none():
